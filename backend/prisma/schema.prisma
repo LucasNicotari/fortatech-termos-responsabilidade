@@ -230,6 +230,7 @@ model SendRequest {
   @@index([triggerType])
   @@index([status])
   @@index([scheduledAt])
+  @@index([requestedByUserId])
   @@map("app_send_requests")
 }
 
