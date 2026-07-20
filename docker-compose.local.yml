@@ -1,0 +1,13 @@
+services:
+  backend:
+    environment:
+      DATABASE_URL: postgresql://fortatech:fortatech@postgres:5432/fortatech_termos?schema=public
+      DIRECT_URL: postgresql://fortatech:fortatech@postgres:5432/fortatech_termos?schema=public
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_PATH: /app/storage-data
+      PUBLIC_BACKEND_URL: http://localhost:3000
+    volumes:
+      - local_storage_data:/app/storage-data
+
+volumes:
+  local_storage_data:

@@ -1,0 +1,66 @@
+services:
+  - type: web
+    runtime: docker
+    name: fortatech-termos-api-hml
+    plan: starter
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: STORAGE_DRIVER
+        value: supabase
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BITRIX_TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      - key: BITRIX_CLIENT_ID
+        sync: false
+      - key: BITRIX_CLIENT_SECRET
+        sync: false
+      - key: BITRIX_PORTAL_ORIGIN
+        value: https://*.bitrix24.com https://*.bitrix24.com.br
+      - key: PUBLIC_BACKEND_URL
+        value: https://fortatech-termos-api-hml.onrender.com
+      - key: FRONTEND_URL
+        value: https://fortatech-termos-web-hml.onrender.com
+      - key: RESPONSIBILITY_TEMPLATE_PATH
+        value: /templates/term.docx
+      - key: LIBREOFFICE_BIN
+        value: libreoffice
+
+  - type: web
+    runtime: static
+    name: fortatech-termos-web-hml
+    branch: main
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: ./frontend/dist
+    autoDeployTrigger: commit
+    envVars:
+      - key: VITE_API_URL
+        value: https://fortatech-termos-api-hml.onrender.com
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; connect-src 'self' https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors https://*.bitrix24.com https://*.bitrix24.com.br; base-uri 'none'"
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

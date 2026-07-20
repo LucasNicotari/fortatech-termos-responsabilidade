@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.data/
+.artifacts/
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.turbo/
+.DS_Store
+.agents/skills/
+backend/node_modules/
+backend/dist/
+frontend/node_modules/
+frontend/dist/

@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+.git
+.github
+.agents
+.data
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+**/*.tsbuildinfo

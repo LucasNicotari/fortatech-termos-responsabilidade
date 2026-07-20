@@ -1,0 +1,25 @@
+import { Type } from 'class-transformer';
+import { ArrayMinSize, IsArray, IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+
+export class EquipmentDto {
+  @IsInt() @Min(1) quantity!: number;
+  @IsString() @IsNotEmpty() description!: string;
+  @IsOptional() @IsString() serialNumber?: string;
+  @IsOptional() @IsString() assetTag?: string;
+  @IsOptional() @IsString() accessories?: string;
+}
+
+export class CreateSendRequestDto {
+  @Type(() => Number) @IsInt() @Min(1) employeeBitrixUserId!: number;
+  @IsEmail() employeeEmail!: string;
+  @IsString() @IsNotEmpty() employeeName!: string;
+  @IsString() @IsNotEmpty() cpf!: string;
+  @IsOptional() @IsString() cargo?: string;
+  @IsOptional() @IsString() departamento?: string;
+  @IsOptional() @IsString() city?: string;
+  @IsOptional() @IsString() templateVersionId?: string;
+  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => EquipmentDto)
+  equipment!: EquipmentDto[];
+}
+
+export class UpdateSendRequestDto extends CreateSendRequestDto {}

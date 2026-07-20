@@ -1,0 +1,432 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  RH
+  TI
+
+  @@map("app_user_role")
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+
+  @@map("app_employee_status")
+}
+
+enum InvitationStatus {
+  UNKNOWN
+  INVITED
+  ACCEPTED
+
+  @@map("app_invitation_status")
+}
+
+enum SendBatchType {
+  MANUAL
+  AUTOMATIC
+
+  @@map("app_send_batch_type")
+}
+
+enum SendTriggerType {
+  BITRIX_INVITE_ACCEPTED
+  MANUAL
+  RETRY
+
+  @@map("app_send_trigger_type")
+}
+
+enum SendRequestStatus {
+  DRAFT
+  READY
+  PENDING
+  SCHEDULED
+  SENDING
+  SENT
+  IN_PROGRESS
+  DECLINED
+  FAILED
+  CANCELED
+  SKIPPED
+
+  @@map("app_send_request_status")
+}
+
+enum SendAttemptStatus {
+  SENDING
+  SUCCESS
+  FAILED
+
+  @@map("app_send_attempt_status")
+}
+
+enum SignatureStatus {
+  PENDING
+  SENT
+  VIEWED
+  IN_PROGRESS
+  SIGNED
+  FINISHED
+  DECLINED
+  ERROR
+  CANCELED
+
+  @@map("app_signature_status")
+}
+
+enum ArchiveStatus {
+  NOT_REQUIRED
+  PENDING
+  ARCHIVED
+  FAILED
+
+  @@map("app_archive_status")
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+
+  @@map("app_webhook_processing_status")
+}
+
+model User {
+  id           String             @id @default(cuid())
+  name         String
+  email        String             @unique
+  passwordHash String?            @map("password_hash")
+  bitrixUserId String?            @unique @map("bitrix_user_id")
+  role         UserRole           @default(ADMIN)
+  active       Boolean            @default(true)
+  lastLoginAt  DateTime?          @map("last_login_at")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  sendBatches  SendBatch[]        @relation("RequestedBatches")
+  sendRequests SendRequest[]      @relation("RequestedSendRequests")
+  auditEvents  AuditEvent[]       @relation("AuditActor")
+  settings     Setting[]          @relation("SettingUpdater")
+  launchCodes  BitrixLaunchCode[]
+
+  @@map("app_users")
+}
+
+model Employee {
+  id               String           @id @default(cuid())
+  bitrixId         String?          @unique @map("bitrix_id")
+  nome             String
+  email            String           @unique
+  cpf              String?          @unique
+  empresa          String?
+  cargo            String?
+  departamento     String?
+  status           EmployeeStatus   @default(ACTIVE)
+  invitationStatus InvitationStatus @default(UNKNOWN) @map("invitation_status")
+  acceptedAt       DateTime?        @map("accepted_at")
+  sendRequests     SendRequest[]
+  signatures       Signature[]
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([invitationStatus])
+  @@map("app_employees")
+}
+
+model DocumentTemplate {
+  id        String                    @id @default(cuid())
+  nome      String
+  descricao String?
+  ativo     Boolean                   @default(true)
+  versions  DocumentTemplateVersion[]
+  createdAt DateTime                  @default(now()) @map("created_at")
+  updatedAt DateTime                  @updatedAt @map("updated_at")
+
+  @@map("app_document_templates")
+}
+
+model DocumentTemplateVersion {
+  id                String           @id @default(cuid())
+  templateId        String           @map("template_id")
+  template          DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  versao            String
+  descricao         String?
+  bitrixTemplateId  String?          @map("bitrix_template_id")
+  sourceStoragePath String?          @map("source_storage_path")
+  sourceSha256      String?          @map("source_sha256")
+  isDefault         Boolean          @default(false) @map("is_default")
+  ativo             Boolean          @default(true)
+  sendRequests      SendRequest[]
+  signatures        Signature[]
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  @@unique([templateId, versao])
+  @@index([bitrixTemplateId])
+  @@index([isDefault, ativo])
+  @@map("app_document_template_versions")
+}
+
+model SendBatch {
+  id                String        @id @default(cuid())
+  name              String
+  type              SendBatchType @default(MANUAL)
+  requestedByUserId String?       @map("requested_by_user_id")
+  requestedBy       User?         @relation("RequestedBatches", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  sendRequests      SendRequest[]
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  @@index([type])
+  @@index([requestedByUserId])
+  @@map("app_send_batches")
+}
+
+model SendRequest {
+  id                    String                  @id @default(cuid())
+  employeeId            String                  @map("employee_id")
+  employee              Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  templateVersionId     String                  @map("template_version_id")
+  templateVersion       DocumentTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  batchId               String?                 @map("batch_id")
+  batch                 SendBatch?              @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  triggerType           SendTriggerType         @map("trigger_type")
+  status                SendRequestStatus       @default(PENDING)
+  scheduledAt           DateTime?               @map("scheduled_at")
+  requestedByUserId     String?                 @map("requested_by_user_id")
+  requestedBy           User?                   @relation("RequestedSendRequests", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  requestedAt           DateTime                @default(now()) @map("requested_at")
+  sentAt                DateTime?               @map("sent_at")
+  canceledAt            DateTime?               @map("canceled_at")
+  failureReason         String?                 @map("failure_reason")
+  documentData          Json?                   @map("document_data")
+  documentFileName      String?                 @map("document_file_name")
+  unsignedStoragePath   String?                 @map("unsigned_storage_path")
+  unsignedSha256        String?                 @map("unsigned_sha256")
+  employeeSnapshot      Json?                   @map("employee_snapshot")
+  companySignerBitrixId String?                 @map("company_signer_bitrix_id")
+  responsibleBitrixId   String?                 @map("responsible_bitrix_id")
+  lockedAt              DateTime?               @map("locked_at")
+  attempts              SendAttempt[]
+  signatures            Signature[]
+  equipment             SendRequestEquipment[]
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@index([templateVersionId])
+  @@index([batchId])
+  @@index([triggerType])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("app_send_requests")
+}
+
+model SendAttempt {
+  id             String            @id @default(cuid())
+  sendRequestId  String            @map("send_request_id")
+  sendRequest    SendRequest       @relation(fields: [sendRequestId], references: [id], onDelete: Cascade)
+  attemptNumber  Int               @map("attempt_number")
+  status         SendAttemptStatus @default(SENDING)
+  startedAt      DateTime          @default(now()) @map("started_at")
+  finishedAt     DateTime?         @map("finished_at")
+  bitrixResponse Json?             @map("bitrix_response")
+  error          String?
+
+  @@unique([sendRequestId, attemptNumber])
+  @@index([status])
+  @@map("app_send_attempts")
+}
+
+model Signature {
+  id                   String                   @id @default(cuid())
+  sendRequestId        String?                  @map("send_request_id")
+  sendRequest          SendRequest?             @relation(fields: [sendRequestId], references: [id], onDelete: SetNull)
+  employeeId           String                   @map("employee_id")
+  employee             Employee                 @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  templateVersionId    String?                  @map("template_version_id")
+  templateVersion      DocumentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  bitrixDocumentId     String?                  @map("bitrix_document_id")
+  bitrixDocumentUid    String?                  @unique @map("bitrix_document_uid")
+  bitrixSignId         String?                  @unique @map("bitrix_sign_id")
+  signerMemberUid      String?                  @map("signer_member_uid")
+  assigneeMemberUid    String?                  @map("assignee_member_uid")
+  rawStatusCode        String?                  @map("raw_status_code")
+  status               SignatureStatus          @default(PENDING)
+  bitrixStage          String?                  @map("bitrix_stage")
+  sentAt               DateTime?                @map("sent_at")
+  viewedAt             DateTime?                @map("viewed_at")
+  signedAt             DateTime?                @map("signed_at")
+  finishedAt           DateTime?                @map("finished_at")
+  canceledAt           DateTime?                @map("canceled_at")
+  lastSyncedAt         DateTime?                @map("last_synced_at")
+  errorMessage         String?                  @map("error_message")
+  archiveStatus        ArchiveStatus            @default(NOT_REQUIRED) @map("archive_status")
+  archiveError         String?                  @map("archive_error")
+  signedStoragePath    String?                  @map("signed_storage_path")
+  signedSha256         String?                  @map("signed_sha256")
+  signedFileSize       Int?                     @map("signed_file_size")
+  bitrixSafeDocumentId String?                  @map("bitrix_safe_document_id")
+  archivedAt           DateTime?                @map("archived_at")
+  events               SignatureEvent[]
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+
+  @@index([sendRequestId])
+  @@index([employeeId])
+  @@index([templateVersionId])
+  @@index([status])
+  @@index([bitrixStage])
+  @@index([archiveStatus])
+  @@map("app_signatures")
+}
+
+model SendRequestEquipment {
+  id            String      @id @default(cuid())
+  sendRequestId String      @map("send_request_id")
+  sendRequest   SendRequest @relation(fields: [sendRequestId], references: [id], onDelete: Cascade)
+  itemNumber    Int         @map("item_number")
+  quantity      Int
+  description   String
+  serialNumber  String?     @map("serial_number")
+  assetTag      String?     @map("asset_tag")
+  accessories   String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@unique([sendRequestId, itemNumber])
+  @@index([sendRequestId])
+  @@map("app_send_request_equipment")
+}
+
+model BitrixInstallation {
+  id                    String   @id @default(cuid())
+  memberId              String   @unique @map("member_id")
+  domain                String
+  clientEndpoint        String   @map("client_endpoint")
+  serverEndpoint        String   @map("server_endpoint")
+  accessTokenEncrypted  String   @map("access_token_encrypted")
+  refreshTokenEncrypted String   @map("refresh_token_encrypted")
+  applicationTokenHash  String?  @map("application_token_hash")
+  scope                 String?
+  expiresAt             DateTime @map("expires_at")
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@index([domain])
+  @@map("app_bitrix_installations")
+}
+
+model BitrixLaunchCode {
+  id        String    @id @default(cuid())
+  codeHash  String    @unique @map("code_hash")
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("app_bitrix_launch_codes")
+}
+
+model SignatureEvent {
+  id          String           @id @default(cuid())
+  signatureId String           @map("signature_id")
+  signature   Signature        @relation(fields: [signatureId], references: [id], onDelete: Cascade)
+  eventType   String           @map("event_type")
+  status      SignatureStatus?
+  bitrixStage String?          @map("bitrix_stage")
+  payload     Json?
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([signatureId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("app_signature_events")
+}
+
+model WebhookEvent {
+  id               String                  @id @default(cuid())
+  source           String
+  eventType        String?                 @map("event_type")
+  externalEventId  String?                 @map("external_event_id")
+  payload          Json
+  processingStatus WebhookProcessingStatus @default(RECEIVED) @map("processing_status")
+  processed        Boolean                 @default(false)
+  error            String?
+  createdAt        DateTime                @default(now()) @map("created_at")
+  processedAt      DateTime?               @map("processed_at")
+
+  @@unique([source, externalEventId])
+  @@index([source, eventType])
+  @@index([externalEventId])
+  @@index([processingStatus])
+  @@index([createdAt])
+  @@map("app_webhook_events")
+}
+
+model IntegrationLog {
+  id            String   @id @default(cuid())
+  type          String
+  source        String
+  endpoint      String?
+  method        String?
+  httpStatus    Int?     @map("http_status")
+  durationMs    Int?     @map("duration_ms")
+  correlationId String?  @map("correlation_id")
+  payload       Json?
+  response      Json?
+  error         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([source])
+  @@index([type])
+  @@index([createdAt])
+  @@index([correlationId])
+  @@map("app_integration_logs")
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  actorUserId String?  @map("actor_user_id")
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  action      String
+  before      Json?
+  after       Json?
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("app_audit_events")
+}
+
+model Setting {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  value           Json
+  description     String?
+  updatedByUserId String?  @map("updated_by_user_id")
+  updatedBy       User?    @relation("SettingUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([updatedByUserId])
+  @@map("app_settings")
+}
