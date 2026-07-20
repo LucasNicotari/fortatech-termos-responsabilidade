@@ -3,6 +3,7 @@ services:
     runtime: docker
     name: fortatech-termos-api-hml
     plan: starter
+    region: virginia
     branch: main
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
