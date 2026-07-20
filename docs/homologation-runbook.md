@@ -44,7 +44,9 @@ conceda acesso público para contornar erros de conexão.
 
 1. Crie um repositório Git privado e envie a branch `main`.
 2. No Render, crie um Blueprint usando `render.yaml`.
-3. Confirme o plano `starter` da API e o static site do frontend.
+3. Durante a configuração inicial, use o plano `free` da API e o static site gratuito do frontend.
+   Antes dos testes de assinatura e webhooks do Bitrix24, altere a API para `starter`, evitando
+   suspensão após inatividade e atrasos no recebimento de eventos.
 4. Informe no Blueprint as variáveis do Supabase. Para as duas credenciais Bitrix ainda
    indisponíveis, use temporariamente `PENDING_CONFIGURATION` e substitua depois.
 5. Se algum nome `onrender.com` já estiver ocupado, atualize no Render e também:

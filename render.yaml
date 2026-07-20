@@ -2,7 +2,7 @@ services:
   - type: web
     runtime: docker
     name: fortatech-termos-api-hml
-    plan: starter
+    plan: free
     region: virginia
     branch: main
     dockerfilePath: ./backend/Dockerfile
