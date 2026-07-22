@@ -27,7 +27,7 @@ export function Dashboard() {
   ];
 
   return (
-    <section className="mx-auto max-w-[1600px]">
+    <section className="mx-auto flex min-h-[calc(100vh-90px)] max-w-[1600px] flex-col">
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div><h1 className="text-xl font-bold tracking-tight text-ink">Visão geral</h1><p className="mt-0.5 text-xs text-steel">Resumo do que exige acompanhamento agora.</p></div>
         <div className="flex items-center gap-2">
@@ -45,7 +45,7 @@ export function Dashboard() {
         ))}
       </div>
 
-      <article className="overflow-hidden rounded border border-b24-border bg-white">
+      <article className="flex flex-1 flex-col overflow-hidden rounded border border-b24-border bg-white">
         <div className="flex items-center justify-between gap-3 border-b border-b24-border px-4 py-2.5"><div><h2 className="text-sm font-semibold text-ink">Termos recentes</h2><p className="mt-0.5 text-[11px] text-steel">Movimentações que merecem acompanhamento.</p></div><Link to="/terms" className="focus-ring hidden items-center gap-1.5 rounded text-xs font-semibold text-b24-blue-dark hover:underline sm:inline-flex">Abrir Termos <ArrowRight size={14} /></Link></div>
         {data?.latestSignatures.length ? (
           <div className="divide-y divide-b24-border/80">
@@ -56,7 +56,7 @@ export function Dashboard() {
               </Link>
             ))}
           </div>
-        ) : <div className="grid min-h-28 place-items-center px-5 py-5 text-center"><div><CheckCircle2 size={24} className="mx-auto mb-2 text-b24-green" /><p className="text-sm font-medium text-ink">Nenhum termo movimentado</p><p className="mt-0.5 text-[11px] text-steel">Os documentos enviados aparecerão aqui.</p></div></div>}
+        ) : <div className="grid min-h-28 flex-1 place-items-center px-5 py-5 text-center"><div><CheckCircle2 size={24} className="mx-auto mb-2 text-b24-green" /><p className="text-sm font-medium text-ink">Nenhum termo movimentado</p><p className="mt-0.5 text-[11px] text-steel">Os documentos enviados aparecerão aqui.</p><Link to="/send-requests" className="focus-ring mt-3 inline-flex items-center gap-1.5 rounded-lg bg-b24-blue px-3 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><FilePlus2 size={14} /> Criar primeiro termo</Link></div></div>}
         <div className="border-t border-b24-border bg-b24-bg/40 px-4 py-2.5 text-right sm:hidden"><Link to="/terms" className="text-xs font-semibold text-b24-blue-dark">Abrir Termos</Link></div>
       </article>
     </section>

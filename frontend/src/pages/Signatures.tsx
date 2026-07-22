@@ -69,7 +69,7 @@ export function Signatures() {
   }
 
   return (
-    <section className="mx-auto max-w-[1600px]">
+    <section className="mx-auto flex min-h-[calc(100vh-90px)] max-w-[1600px] flex-col">
       <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-ink">Termos</h1>
@@ -95,7 +95,7 @@ export function Signatures() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded border border-b24-border bg-white">
+      <div className="flex flex-1 flex-col overflow-hidden rounded border border-b24-border bg-white">
         <div className="hidden grid-cols-[minmax(240px,1.4fr)_minmax(180px,1fr)_150px_130px_32px] gap-4 border-b border-b24-border bg-b24-bg/60 px-5 py-2.5 text-xs font-semibold text-steel lg:grid">
           <span>Colaborador</span><span>Documento</span><span>Status</span><span>Atualização</span><span />
         </div>
@@ -141,7 +141,7 @@ export function Signatures() {
             })}
           </div>
         ) : (
-          <div className="grid min-h-64 place-items-center px-5 py-10 text-center"><div><FileText className="mx-auto text-zinc-300" size={32} /><p className="mt-3 font-medium text-ink">Nenhum termo encontrado</p><p className="mt-1 text-xs text-steel">Altere os filtros ou crie um novo termo.</p></div></div>
+          <div className="grid min-h-64 flex-1 place-items-center px-5 py-10 text-center"><div><FileText className="mx-auto text-zinc-300" size={32} /><p className="mt-3 font-medium text-ink">Nenhum termo encontrado</p><p className="mt-1 text-xs text-steel">{requests.length ? 'Altere a busca ou os filtros selecionados.' : 'Crie o primeiro termo para iniciar o acompanhamento.'}</p>{!requests.length && <Link to="/send-requests" className="focus-ring mt-4 inline-flex items-center gap-2 rounded-lg bg-b24-blue px-3.5 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><FilePlus2 size={15} /> Criar primeiro termo</Link>}</div></div>
         )}
       </div>
     </section>

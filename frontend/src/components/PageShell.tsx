@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import {
   Activity,
@@ -16,6 +17,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { FortaTechMark } from './FortaTechMark';
 import { UserAvatar } from './UserAvatar';
 import { BitrixFrameSync } from './BitrixFrameSync';
+import { api } from '../services/api';
+import { BitrixEmployee } from '../types';
 
 const primaryItems = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
@@ -34,6 +37,12 @@ export function PageShell() {
   const { user, logout } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const { data: bitrixEmployees = [] } = useQuery({
+    queryKey: ['bitrix-term-employees'],
+    queryFn: async () => (await api.get<BitrixEmployee[]>('/bitrix/term-employees')).data,
+    enabled: Boolean(user?.bitrixUserId),
+    staleTime: 5 * 60 * 1000
+  });
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -52,6 +61,7 @@ export function PageShell() {
   }, [profileOpen]);
 
   const role = user?.role === 'ADMIN' ? 'Administrador' : user?.role;
+  const currentUserPhoto = bitrixEmployees.find((employee) => String(employee.ID) === String(user?.bitrixUserId))?.PERSONAL_PHOTO;
 
   return (
     <div className="min-h-screen bg-b24-bg">
@@ -92,7 +102,7 @@ export function PageShell() {
                   <span className="block truncate text-sm font-semibold leading-tight text-ink">{user?.name}</span>
                   <span className="block truncate text-[10px] uppercase tracking-[0.08em] text-steel">{role}</span>
                 </span>
-                <UserAvatar name={user?.name || 'Usuário'} size="sm" />
+                <UserAvatar name={user?.name || 'Usuário'} photoUrl={currentUserPhoto} size="sm" />
                 <ChevronDown size={15} className={`text-steel transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
               </button>
 
@@ -100,7 +110,7 @@ export function PageShell() {
                 <div role="menu" className="absolute right-0 top-[calc(100%+10px)] w-[290px] overflow-hidden rounded-xl border border-b24-border bg-white shadow-[0_18px_45px_rgba(82,92,105,0.22)]">
                   <div className="border-b border-b24-border bg-gradient-to-br from-sky-50 to-white px-4 py-3.5">
                     <div className="flex min-w-0 items-center gap-3">
-                      <UserAvatar name={user?.name || 'Usuário'} />
+                      <UserAvatar name={user?.name || 'Usuário'} photoUrl={currentUserPhoto} />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-ink">{user?.name}</p>
                         <p className="truncate text-xs text-steel">{user?.email}</p>
