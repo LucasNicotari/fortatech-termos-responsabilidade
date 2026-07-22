@@ -58,10 +58,10 @@ export function PageShell() {
       <BitrixFrameSync />
       <header className="sticky top-0 z-30 border-t-[3px] border-t-b24-blue bg-white shadow-[0_2px_10px_rgba(82,92,105,0.08)]">
         <div className="mx-auto max-w-[1600px] px-3 sm:px-5 lg:px-7">
-          <div className="flex min-h-[66px] items-center gap-3 lg:gap-6">
+          <div className="flex min-h-[58px] items-center gap-3 lg:gap-5">
             <Link to="/" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FortaDocs - Dashboard">
-              <FortaTechMark className="h-10 w-10 shrink-0 shadow-sm" />
-              <span className="text-[22px] font-extrabold leading-none tracking-[-0.04em] sm:text-2xl">
+              <FortaTechMark className="h-9 w-9 shrink-0 shadow-sm" />
+              <span className="text-xl font-extrabold leading-none tracking-[-0.04em] sm:text-[22px]">
                 <span className="text-[#ed1c24]">Forta</span><span className="text-ink">Docs</span>
               </span>
             </Link>
@@ -151,7 +151,7 @@ export function PageShell() {
         </div>
       </header>
 
-      <main className="mx-auto min-w-0 max-w-[1600px] px-3 py-4 sm:px-5 sm:py-5 lg:px-7 lg:py-6">
+      <main className="mx-auto min-w-0 max-w-[1600px] px-3 py-3 sm:px-5 sm:py-4 lg:px-6">
         <Outlet />
       </main>
     </div>
