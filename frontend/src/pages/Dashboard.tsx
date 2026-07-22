@@ -27,7 +27,7 @@ export function Dashboard() {
   ];
 
   return (
-    <section className="mx-auto flex min-h-[calc(100vh-90px)] max-w-[1600px] flex-col">
+    <section className="mx-auto flex min-h-[calc(100vh-115px)] max-w-[1600px] flex-col">
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div><h1 className="text-xl font-bold tracking-tight text-ink">Visão geral</h1><p className="mt-0.5 text-xs text-steel">Resumo do que exige acompanhamento agora.</p></div>
         <div className="flex items-center gap-2">

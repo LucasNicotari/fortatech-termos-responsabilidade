@@ -69,7 +69,7 @@ export function Signatures() {
   }
 
   return (
-    <section className="mx-auto flex min-h-[calc(100vh-90px)] max-w-[1600px] flex-col">
+    <section className="mx-auto flex min-h-[calc(100vh-115px)] max-w-[1600px] flex-col">
       <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-ink">Termos</h1>
