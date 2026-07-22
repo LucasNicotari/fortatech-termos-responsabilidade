@@ -213,8 +213,8 @@ export function SendRequests() {
               <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-b24-border pt-4">
                 <BackButton onClick={() => setStep(2)} />
                 <button disabled={prepare.isPending} onClick={() => prepare.mutate()} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-b24-blue px-4 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50 disabled:opacity-50"><Eye size={16} /> {prepare.isPending ? 'Preparando...' : previewUrl ? 'Atualizar prévia' : 'Gerar prévia'}</button>
-                {previewUrl && <a href={previewUrl} target="_blank" rel="noreferrer" className="focus-ring rounded-lg border border-mint px-4 py-2 text-sm font-semibold text-mint hover:bg-emerald-50">Abrir PDF</a>}
-                <button disabled={!draftId || !previewUrl || !providerReady || send.isPending} onClick={() => draftId && send.mutate(draftId)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50" title={!providerReady ? 'Configure a ZapSign Sandbox para liberar o envio' : undefined}><Send size={16} /> {send.isPending ? 'Enviando...' : providerQuery.data?.local ? 'Simular envio' : 'Enviar ao colaborador'}</button>
+                {previewUrl && <a href={previewUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded-lg border border-mint px-4 py-2 text-sm font-semibold text-mint hover:bg-emerald-50"><ExternalLink size={15} /> Visualizar PDF</a>}
+                <button disabled={!draftId || !previewUrl || !providerReady || send.isPending} onClick={() => draftId && send.mutate(draftId)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50" title={!providerReady ? providerSetupMessage(providerQuery.data) : undefined}><Send size={16} /> {send.isPending ? 'Enviando...' : providerQuery.data?.local ? 'Simular envio' : 'Enviar ao colaborador'}</button>
               </div>
             </div>
           )}
@@ -227,8 +227,18 @@ export function SendRequests() {
 function ProviderNotice({ provider, ready }: { provider?: ProviderStatus; ready: boolean }) {
   if (provider?.local) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Modo local: envio e assinatura simulados; nenhum e-mail real será enviado.</div>;
   if (provider?.environment === 'sandbox' && ready) return <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">Homologação ativa: documentos de teste sem validade jurídica.</div>;
-  if (!ready) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><strong>Envio em preparação.</strong> Configure a ZapSign Sandbox; a prévia do PDF continua disponível.</div>;
+  if (!ready) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><strong>Envio indisponível.</strong> {providerSetupMessage(provider)} A prévia do PDF continua disponível.</div>;
   return null;
+}
+
+function providerSetupMessage(provider?: ProviderStatus) {
+  const missing = [
+    !provider?.configured && 'ZAPSIGN_API_TOKEN',
+    !provider?.webhookConfigured && 'ZAPSIGN_WEBHOOK_SECRET'
+  ].filter(Boolean);
+  return missing.length
+    ? `Configure ${missing.join(' e ')} nos segredos do backend no Render.`
+    : 'Conclua a configuração da ZapSign Sandbox no Render.';
 }
 
 function StepButton({ number, label, current, available, onClick }: { number: Step; label: string; current: Step; available: boolean; onClick: () => void }) {

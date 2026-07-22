@@ -23,10 +23,12 @@ async function main() {
     }
   });
 
-  await prisma.documentTemplateVersion.updateMany({
-    where: { templateId: template.id, isDefault: true },
-    data: { isDefault: false }
+  const currentDefault = await prisma.documentTemplateVersion.findFirst({
+    where: { isDefault: true, ativo: true }
   });
+  const replaceLegacyDefault = !currentDefault
+    || (currentDefault.templateId === template.id
+      && ['0.9-hml', '1.0', '1.0-operacional'].includes(currentDefault.versao));
 
   await prisma.documentTemplateVersion.updateMany({
     where: { templateId: template.id, versao: '1.0' },
@@ -40,18 +42,43 @@ async function main() {
   await prisma.documentTemplateVersion.upsert({
     where: { templateId_versao: { templateId: template.id, versao: '0.9-hml' } },
     update: {
-      descricao: 'Documento candidato, parametrizado e marcado para homologacao.',
-      isDefault: true,
-      ativo: true
+      descricao: 'Documento anterior de homologacao, preservado para rastreabilidade.',
+      isDefault: false,
+      ativo: false
     },
     create: {
       templateId: template.id,
       versao: '0.9-hml',
-      descricao: 'Documento candidato, parametrizado e marcado para homologacao.',
-      isDefault: true,
+      descricao: 'Documento anterior de homologacao, preservado para rastreabilidade.',
+      isDefault: false,
+      ativo: false
+    }
+  });
+
+  const operational = await prisma.documentTemplateVersion.upsert({
+    where: { templateId_versao: { templateId: template.id, versao: '1.0-operacional' } },
+    update: {
+      descricao: 'Modelo operacional sem faixa de homologacao, com titulos centralizados.',
+      ativo: true
+    },
+    create: {
+      templateId: template.id,
+      versao: '1.0-operacional',
+      descricao: 'Modelo operacional sem faixa de homologacao, com titulos centralizados.',
+      isDefault: false,
       ativo: true
     }
   });
+
+  if (replaceLegacyDefault) {
+    await prisma.$transaction([
+      prisma.documentTemplateVersion.updateMany({ data: { isDefault: false } }),
+      prisma.documentTemplateVersion.update({
+        where: { id: operational.id },
+        data: { isDefault: true, ativo: true }
+      })
+    ]);
+  }
 }
 
 main()

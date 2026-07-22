@@ -1,6 +1,12 @@
-import { SendRequestsService } from './send-requests.service';
+import { responsibilityTermFileName, SendRequestsService } from './send-requests.service';
 
 describe('SendRequestsService', () => {
+  it('gera o nome do PDF com o primeiro e o ultimo nome do colaborador', () => {
+    expect(responsibilityTermFileName('Lucas Nicotari Maffei')).toBe('TR.Lucas_Maffei.pdf');
+    expect(responsibilityTermFileName('João D\'Angelo')).toBe('TR.Joao_DAngelo.pdf');
+    expect(responsibilityTermFileName('  Nicoly  ')).toBe('TR.Nicoly.pdf');
+  });
+
   it('retorna erro de negocio quando o CPF pertence a outro colaborador', async () => {
     const prisma = {
       employee: {

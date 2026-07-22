@@ -101,7 +101,7 @@ export class SendRequestsService {
     });
     return this.prisma.sendRequest.update({
       where: { id: request.id },
-      data: { documentFileName: `TR-${request.id}.pdf` },
+      data: { documentFileName: responsibilityTermFileName(dto.employeeName) },
       include: { employee: true, equipment: true, templateVersion: { include: { template: true } } }
     });
   }
@@ -138,6 +138,7 @@ export class SendRequestsService {
           status: SendRequestStatus.DRAFT,
           employeeSnapshot: this.toJson(this.employeeSnapshot(dto)),
           documentData: this.toJson({ city: dto.city || 'Sao Paulo' }),
+          documentFileName: responsibilityTermFileName(dto.employeeName),
           unsignedStoragePath: null,
           unsignedSha256: null,
           equipment: {
@@ -171,9 +172,14 @@ export class SendRequestsService {
     await this.storage.upload(path, rendered.pdf, 'application/pdf', true);
     const updated = await this.prisma.sendRequest.update({
       where: { id },
-      data: { status: SendRequestStatus.READY, unsignedStoragePath: path, unsignedSha256: rendered.sha256 }
+      data: {
+        status: SendRequestStatus.READY,
+        documentFileName: responsibilityTermFileName(String(snapshot.name)),
+        unsignedStoragePath: path,
+        unsignedSha256: rendered.sha256
+      }
     });
-    return { request: updated, previewUrl: await this.storage.createSignedUrl(path, 300) };
+    return { request: updated, previewUrl: await this.storage.createSignedUrl(path, 300, false) };
   }
 
   async send(id: string) {
@@ -317,4 +323,14 @@ export class SendRequestsService {
   private toJson(value: unknown): Prisma.InputJsonValue {
     return JSON.parse(JSON.stringify(value));
   }
+}
+
+export function responsibilityTermFileName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const selected = parts.length > 1 ? [parts[0], parts.at(-1)!] : parts;
+  const safeName = selected
+    .map((part) => part.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9-]/g, ''))
+    .filter(Boolean)
+    .join('_') || 'Colaborador';
+  return `TR.${safeName}.pdf`;
 }

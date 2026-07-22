@@ -11,7 +11,10 @@ import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
-import { parameterizeResponsibilityTemplateXml } from './template-parameterizer';
+import {
+  formatResponsibilityTemplateXml,
+  parameterizeResponsibilityTemplateXml
+} from './template-parameterizer';
 
 export interface ResponsibilityDocumentData {
   employeeName: string;
@@ -79,7 +82,9 @@ export class DocumentsService {
     }
     const documentXml = zip.file('word/document.xml')?.asText();
     if (!documentXml) throw new UnprocessableEntityException('Template DOCX sem word/document.xml');
-    const parameterizedXml = parameterizeResponsibilityTemplateXml(documentXml);
+    const parameterizedXml = formatResponsibilityTemplateXml(
+      parameterizeResponsibilityTemplateXml(documentXml)
+    );
     const missingMarkers = ['{employeeName}', '{cpf}', '{#equipments}', '{/equipments}']
       .filter((marker) => !parameterizedXml.includes(marker));
     if (missingMarkers.length) {
@@ -127,7 +132,8 @@ export class DocumentsService {
     await this.storage.upload(
       storagePath,
       source,
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      true
     );
     await this.prisma.documentTemplateVersion.update({
       where: { id: version.id },

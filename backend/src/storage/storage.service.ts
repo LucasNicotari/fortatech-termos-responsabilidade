@@ -76,15 +76,20 @@ export class StorageService {
     if (error) throw new ServiceUnavailableException(`Falha ao remover arquivo do Supabase Storage: ${error.message}`);
   }
 
-  async createSignedUrl(path: string, expiresIn = 300) {
+  async createSignedUrl(path: string, expiresIn = 300, download: boolean | string = true) {
     await this.ensureBucket();
     if (this.driver === 'local') {
       const expires = Math.floor(Date.now() / 1000) + expiresIn;
       const signature = this.sign(path, expires);
       const query = new URLSearchParams({ path, expires: String(expires), signature });
+      if (download) query.set('download', typeof download === 'string' ? download : 'true');
       return `${this.publicBackendUrl}/storage/local?${query.toString()}`;
     }
-    const { data, error } = await this.client!.storage.from(this.bucket).createSignedUrl(path, expiresIn, { download: true });
+    const { data, error } = await this.client!.storage.from(this.bucket).createSignedUrl(
+      path,
+      expiresIn,
+      download ? { download } : undefined
+    );
     if (error || !data) throw new ServiceUnavailableException(`Falha ao assinar URL: ${error?.message || 'sem URL'}`);
     return data.signedUrl;
   }

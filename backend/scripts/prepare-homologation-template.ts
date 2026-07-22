@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, resolve } from 'path';
 import PizZip from 'pizzip';
 import {
-  addHomologationWatermark,
+  formatResponsibilityTemplateXml,
   parameterizeResponsibilityTemplateXml
 } from '../src/documents/template-parameterizer';
 
@@ -39,15 +39,15 @@ async function main() {
   const documentXml = zip.file('word/document.xml')?.asText();
   if (!documentXml) throw new Error('DOCX sem word/document.xml');
   const parameterized = parameterizeResponsibilityTemplateXml(documentXml);
-  zip.file('word/document.xml', addHomologationWatermark(parameterized));
-  const homologation = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+  zip.file('word/document.xml', formatResponsibilityTemplateXml(parameterized));
+  const operational = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
   await mkdir(dirname(output), { recursive: true });
-  await writeFile(output, homologation);
+  await writeFile(output, operational);
 
   const hash = (value: Buffer) => createHash('sha256').update(value).digest('hex');
   console.log(JSON.stringify({
     original: { path: originalOutput, bytes: source.length, sha256: hash(source) },
-    homologation: { path: output, bytes: homologation.length, sha256: hash(homologation) }
+    operational: { path: output, bytes: operational.length, sha256: hash(operational) }
   }, null, 2));
 }
 

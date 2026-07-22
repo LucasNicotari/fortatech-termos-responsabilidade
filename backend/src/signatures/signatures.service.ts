@@ -72,7 +72,8 @@ export class SignaturesService {
         finished && signature.signedStoragePath
           ? signature.signedStoragePath
           : signature.sendRequest.unsignedStoragePath,
-        900
+        900,
+        false
       )
     };
   }
@@ -260,7 +261,14 @@ export class SignaturesService {
     if (!signature.signedStoragePath || signature.archiveStatus !== ArchiveStatus.ARCHIVED) {
       throw new NotFoundException('Backup do documento assinado ainda nao disponivel');
     }
-    return { url: await this.storage.createSignedUrl(signature.signedStoragePath, 300), expiresIn: 300 };
+    return {
+      url: await this.storage.createSignedUrl(
+        signature.signedStoragePath,
+        300,
+        signature.sendRequest?.documentFileName || 'Termo_de_Responsabilidade.pdf'
+      ),
+      expiresIn: 300
+    };
   }
 
   private async syncOne(id: string, eventStatus?: string, payload?: unknown) {

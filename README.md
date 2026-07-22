@@ -86,4 +86,4 @@ npm.cmd run test:local
 - [Revisão jurídica](docs/legal-review-checklist.md)
 - [Otimização das imagens Docker](docs/docker-optimization-report.md)
 
-O ambiente atual é de homologação e o documento possui a marca **HOMOLOGAÇÃO — SEM VALIDADE**. Produção exige aprovação jurídica, segredos e projetos separados, template sem a marca e hospedagem de backend que não suspenda por inatividade.
+O ambiente atual é de homologação. O documento operacional preserva o Word original, não exibe faixa de homologação e centraliza os dois títulos principais. Produção ainda exige aprovação jurídica, segredos e projetos separados e hospedagem de backend que não suspenda por inatividade.

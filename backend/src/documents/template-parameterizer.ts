@@ -67,16 +67,15 @@ export function parameterizeResponsibilityTemplateXml(xml: string) {
   return output;
 }
 
-export function addHomologationWatermark(xml: string) {
-  if (visibleText(xml).includes('HOMOLOGAÇÃO — SEM VALIDADE')) return xml;
-  const watermark = [
-    '<w:p>',
-    '<w:pPr><w:jc w:val="center"/><w:spacing w:after="180"/></w:pPr>',
-    '<w:r><w:rPr><w:b/><w:color w:val="C00000"/><w:sz w:val="28"/></w:rPr>',
-    '<w:t>HOMOLOGAÇÃO — SEM VALIDADE</w:t></w:r>',
-    '</w:p>'
-  ].join('');
-  return xml.replace(/<w:body\b([^>]*)>/, `<w:body$1>${watermark}`);
+export function formatResponsibilityTemplateXml(xml: string) {
+  const headings = new Set([
+    'TERMO DE RESPONSABILIDADE',
+    'Equipamentos Eletrônicos e de Informática'
+  ]);
+  return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+    if (!headings.has(visibleText(paragraph).trim())) return paragraph;
+    return centerParagraph(paragraph);
+  });
 }
 
 export function visibleTemplateText(xml: string) {
@@ -120,6 +119,16 @@ function replaceTextNodes(block: string, replacement: string) {
     first = false;
     return `<w:t${attributes}>${escapeXml(replacement)}</w:t>`;
   });
+}
+
+function centerParagraph(paragraph: string) {
+  if (/<w:jc\b[^>]*\/>/.test(paragraph)) {
+    return paragraph.replace(/<w:jc\b[^>]*\/>/, '<w:jc w:val="center"/>');
+  }
+  if (/<w:pPr\b[^>]*>/.test(paragraph)) {
+    return paragraph.replace(/<w:pPr\b([^>]*)>/, '<w:pPr$1><w:jc w:val="center"/>');
+  }
+  return paragraph.replace(/<w:p\b([^>]*)>/, '<w:p$1><w:pPr><w:jc w:val="center"/></w:pPr>');
 }
 
 function visibleText(xml: string) {

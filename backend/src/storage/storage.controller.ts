@@ -12,13 +12,16 @@ export class StorageController {
     @Query('path') path: string,
     @Query('expires') expires: string,
     @Query('signature') signature: string,
+    @Query('download') download: string | undefined,
     @Res() response: Response
   ) {
     const file = await this.storage.readSignedLocalFile(path, Number(expires), signature);
     response.type(file.fileName.toLowerCase().endsWith('.docx')
       ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       : 'application/pdf');
-    response.setHeader('Content-Disposition', `inline; filename="${file.fileName.replace(/["\\]/g, '_')}"`);
+    const requestedName = download && download !== 'true' ? download : file.fileName;
+    const disposition = download ? 'attachment' : 'inline';
+    response.setHeader('Content-Disposition', `${disposition}; filename="${requestedName.replace(/["\\]/g, '_')}"`);
     response.send(file.contents);
   }
 }

@@ -4,6 +4,7 @@ import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { libreOfficeConversionArguments } from './documents.service';
 import {
+  formatResponsibilityTemplateXml,
   parameterizeResponsibilityTemplateXml,
   visibleTemplateText
 } from './template-parameterizer';
@@ -41,13 +42,21 @@ describe('DocumentsService template parameterization', () => {
     expect(output).toContain('{assetTags}');
   });
 
-  it('renders the repository homologation DOCX with multiple equipment rows', () => {
+  it('renders the repository DOCX without a homologation banner and with centered headings', () => {
     const path = resolve(__dirname, '../../../templates/term.docx');
     const zip = new PizZip(readFileSync(path));
     const xml = zip.file('word/document.xml')?.asText();
     expect(xml).toBeDefined();
-    expect(visibleTemplateText(xml!)).toContain('HOMOLOGAÇÃO — SEM VALIDADE');
-    zip.file('word/document.xml', parameterizeResponsibilityTemplateXml(xml!));
+    expect(visibleTemplateText(xml!)).not.toContain('HOMOLOGAÇÃO — SEM VALIDADE');
+    const formatted = formatResponsibilityTemplateXml(parameterizeResponsibilityTemplateXml(xml!));
+    const centeredHeadings = [...formatted.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)]
+      .filter((match) => [
+        'TERMO DE RESPONSABILIDADE',
+        'Equipamentos Eletrônicos e de Informática'
+      ].includes(visibleTemplateText(match[0]).trim()));
+    expect(centeredHeadings).toHaveLength(2);
+    centeredHeadings.forEach(([paragraph]) => expect(paragraph).toContain('<w:jc w:val="center"/>'));
+    zip.file('word/document.xml', formatted);
 
     const template = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
     template.render({

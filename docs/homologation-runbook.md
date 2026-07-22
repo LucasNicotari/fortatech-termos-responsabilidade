@@ -146,7 +146,7 @@ Destino: `lucas.nicotari@fortatech.com.br`.
 2. escolha o usuário Bitrix de Lucas e confirme o e-mail acima;
 3. use CPF sintético válido e claramente registre patrimônios como `HML-TESTE`;
 4. inclua ao menos dois equipamentos fictícios;
-5. gere a prévia e confirme a marca **HOMOLOGAÇÃO — SEM VALIDADE**, nome, CPF e itens;
+5. gere a prévia e confirme os títulos centralizados, nome, CPF e itens;
 6. envie uma única vez;
 7. confirme recebimento do e-mail da ZapSign;
 8. abra o link, informe o token e desenhe a assinatura de teste;
