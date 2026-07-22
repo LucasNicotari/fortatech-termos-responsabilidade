@@ -85,17 +85,20 @@ https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/install
 Permissões necessárias para o fluxo atual:
 
 ```text
-basic
-user
+user_basic
 department
 im
 ```
 
-- `user`/`basic`: identidade e perfil dos colaboradores;
+- `user_basic`: identidade, perfil básico e e-mail dos colaboradores, sem permissão para alterá-los;
 - `department`: converte `UF_DEPARTMENT` no nome do departamento;
 - `im`: envia notificações pessoais aos usuários selecionados.
 
 `crm` e `sign.b2e` não são usados pelo fluxo final e podem ser retirados. O instalador registra apenas `OnAppInstall` e `OnAppUninstall`.
+
+Referências oficiais: [`user.get`](https://apidocs.bitrix24.com/api-reference/user/user-get.html),
+[`department.get`](https://apidocs.bitrix24.com/api-reference/departments/department-get.html) e
+[`im.notify.personal.add`](https://apidocs.bitrix24.com/api-reference/chats/notifications/im-notify-personal-add.html).
 
 Procedimento:
 

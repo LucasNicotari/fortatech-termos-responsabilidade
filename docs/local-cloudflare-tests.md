@@ -76,7 +76,7 @@ reconstroi os containers com `http://localhost:3000` e `http://localhost:5173`.
 
 Se for testar a instalacao pelo Bitrix24, copie as duas URLs exibidas para o cadastro do
 aplicativo apenas enquanto esse processo estiver aberto. Como as URLs mudam a cada inicio, nao
-as grave no `.env`, no Git nem no Render. O portal deve usar os escopos `basic`, `user`,
+as grave no `.env`, no Git nem no Render. O portal deve usar os escopos `user_basic`,
 `department` e `im`, e `BITRIX_CLIENT_ID`/`BITRIX_CLIENT_SECRET` precisam
 estar preenchidos localmente.
 
