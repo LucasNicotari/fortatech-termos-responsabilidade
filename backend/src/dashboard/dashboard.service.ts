@@ -14,9 +14,7 @@ export class DashboardService {
       signed,
       sendErrors,
       signatureErrors,
-      latestEvents,
-      latestSignatures,
-      byStatus
+      latestSignatures
     ] = await Promise.all([
       this.prisma.employee.count(),
       this.prisma.sendRequest.count({ where: { status: { in: [SendRequestStatus.DRAFT, SendRequestStatus.READY, SendRequestStatus.PENDING, SendRequestStatus.SENDING, SendRequestStatus.IN_PROGRESS] } } }),
@@ -24,7 +22,6 @@ export class DashboardService {
       this.prisma.signature.count({ where: { status: { in: [SignatureStatus.SIGNED, SignatureStatus.FINISHED] } } }),
       this.prisma.sendRequest.count({ where: { status: SendRequestStatus.FAILED } }),
       this.prisma.signature.count({ where: { status: SignatureStatus.ERROR } }),
-      this.prisma.webhookEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
       this.prisma.signature.findMany({
         orderBy: { updatedAt: 'desc' },
         take: 10,
@@ -33,10 +30,6 @@ export class DashboardService {
           sendRequest: true,
           templateVersion: { include: { template: true } }
         }
-      }),
-      this.prisma.signature.groupBy({
-        by: ['status'],
-        _count: { status: true }
       })
     ]);
 
@@ -46,9 +39,7 @@ export class DashboardService {
       sent,
       signed,
       errors: sendErrors + signatureErrors,
-      latestEvents,
-      latestSignatures,
-      byStatus: byStatus.map((item) => ({ status: item.status, total: item._count.status }))
+      latestSignatures
     };
   }
 }

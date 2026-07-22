@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { LogsService } from './logs.service';
@@ -10,13 +10,8 @@ import { LogsService } from './logs.service';
 export class LogsController {
   constructor(private readonly logs: LogsService) {}
 
-  @Get()
-  findAll() {
-    return this.logs.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.logs.findOne(id);
+  @Get('activity')
+  activity() {
+    return this.logs.activity();
   }
 }

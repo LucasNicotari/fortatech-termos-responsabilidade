@@ -1,104 +1,89 @@
-# Fortatech Termos
+# FortaDocs
 
-Aplicativo local embutido no Bitrix24 para preparar, revisar, enviar e acompanhar Termos de Responsabilidade. A assinatura ocorre no Bitrix24 Sign B2E e uma copia privada do PDF concluido e arquivada no Supabase Storage.
+Aplicativo interno da Forta Tech, incorporado ao Bitrix24, para preparar, revisar, enviar e acompanhar Termos de Responsabilidade.
 
-## Fluxo
+## Fluxo oficial
 
-1. O administrador instala o aplicativo local com os escopos `basic`, `user`, `crm` e `sign.b2e`.
-2. RH/TI seleciona um colaborador, informa CPF e equipamentos e salva um rascunho.
-3. O backend parametriza o DOCX aprovado, converte para PDF e cria uma previa privada.
-4. Depois da revisao, `sign.b2e.document.send` envia o PDF ao representante e ao colaborador.
-5. Eventos oficiais atualizam o status pelo UID do documento.
-6. Ao concluir, o PDF do cofre da empresa e copiado para o bucket privado `responsibility-terms` com SHA-256.
+1. Um operador autorizado abre o FortaDocs pelo Bitrix24.
+2. Seleciona um colaborador ativo; nome, e-mail, cargo, departamento e foto vêm do perfil do Bitrix24.
+3. Confere os dados, informa o CPF e registra os equipamentos entregues.
+4. O backend preenche o DOCX, converte-o para PDF e disponibiliza uma prévia privada por cinco minutos.
+5. Depois da revisão, a ZapSign envia o link de assinatura somente ao colaborador.
+6. O colaborador confirma o token recebido por e-mail e desenha a própria assinatura.
+7. Os usuários marcados para receber notificações são avisados no Bitrix24; eles não assinam o termo.
+8. O PDF concluído é salvo no bucket privado do Supabase e identificado por SHA-256.
 
-O aplicativo gera o PDF, mas nao cria assinatura propria nem substitui o Bitrix24.
+Lucas e Osmar podem operar o fluxo inicial. Nicoly e Marcelo recebem notificações. Essas atribuições são editáveis em **Configurações > Usuários e acessos**.
 
-## Stack
+## Componentes
 
-- Backend: NestJS, Prisma, PostgreSQL/Supabase, OAuth Bitrix24 e Swagger.
-- Frontend: React, Vite, TypeScript, TanStack Query e Tailwind.
-- Documento: Docxtemplater e LibreOffice headless.
-- Arquivos: Supabase Storage privado.
-- Infra: Docker Compose.
+- React, Vite, TypeScript, TanStack Query e Tailwind no frontend.
+- NestJS, Prisma e PostgreSQL/Supabase no backend.
+- OAuth e REST do Bitrix24 para identidade, pessoas, departamentos e notificações.
+- Docxtemplater e LibreOffice headless para DOCX e PDF.
+- ZapSign Sandbox para a assinatura individual de homologação.
+- Supabase Storage privado para templates, prévias e documentos concluídos.
+- Docker Compose para desenvolvimento e Render para HTTPS público.
 
-## Configuracao
+## Desenvolvimento local
 
-Copie `.env.example` para `.env`. Variaveis principais:
+Na raiz do repositório:
 
-- `DATABASE_URL` e `DIRECT_URL`: conexoes PostgreSQL do Supabase.
-- `JWT_SECRET`: assinatura das sessoes curtas do aplicativo.
-- `BITRIX_TOKEN_ENCRYPTION_KEY`: chave forte e exclusiva para cifrar tokens OAuth no banco.
-- `BITRIX_CLIENT_ID` e `BITRIX_CLIENT_SECRET`: credenciais do aplicativo local.
-- `BITRIX_PORTAL_ORIGIN`: origem autorizada a carregar o iframe.
-- `PUBLIC_BACKEND_URL`: URL HTTPS que recebe instalacao e eventos.
-- `SUPABASE_URL` e `SUPABASE_SECRET_KEY`: acesso server-side ao Storage.
-- `RESPONSIBILITY_TEMPLATE_PATH`: caminho do DOCX aprovado.
-- `FRONTEND_URL` e `VITE_API_URL`: URLs publicas do frontend e backend.
-
-Segredos reais ficam somente no `.env` e nunca devem usar prefixos publicos no frontend.
-
-## Banco
-
-```bash
-cd backend
-npm.cmd run prisma:generate
-npm.cmd run prisma:deploy
-npm.cmd run prisma:seed
+```powershell
+npm.cmd run dev:local
 ```
 
-As tabelas `app_*` usam RLS e revogam acesso de `anon` e `authenticated`. A aplicacao acessa o banco somente pelo backend.
+Abra `http://localhost:5173`. O modo local usa pessoas sintéticas e simula envio, assinatura manuscrita, notificações e arquivamento sem chamar o Bitrix24 ou enviar e-mail.
 
-## Desenvolvimento
+Teste ponta a ponta:
 
-```bash
-cd backend
-npm.cmd install
-npm.cmd run start:dev
+```powershell
+npm.cmd run test:local
 ```
 
-```bash
-cd frontend
-npm.cmd install
-npm.cmd run dev
+Encerramento:
+
+```powershell
+npm.cmd run local:down
 ```
 
-Para Docker, copie o DOCX para `templates/term.docx` ou configure `RESPONSIBILITY_TEMPLATE_HOST_PATH`:
+## Variáveis privadas
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
-```
+Copie `.env.example` para `.env`. Nunca envie o `.env` ao Git ou ao chat.
 
-O arquivo adicional usa PostgreSQL e armazenamento assinado locais, permitindo desenvolver sem
-um projeto Supabase ativo. Para homologacao/producao, use apenas `docker-compose.yml` e configure
-as credenciais reais do Supabase.
+- Supabase: `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
+- Segurança: `JWT_SECRET`, `BITRIX_TOKEN_ENCRYPTION_KEY`.
+- Bitrix24: `BITRIX_CLIENT_ID`, `BITRIX_CLIENT_SECRET`, `BITRIX_PORTAL_ORIGIN`.
+- URLs: `PUBLIC_BACKEND_URL`, `FRONTEND_URL`, `CORS_ORIGINS`, `VITE_API_URL`.
+- ZapSign: `ZAPSIGN_API_URL`, `ZAPSIGN_API_TOKEN`, `ZAPSIGN_WEBHOOK_SECRET`.
 
-O repositório já inclui uma cópia parametrizada do documento recebido, marcada como
-`HOMOLOGAÇÃO — SEM VALIDADE`, e preserva o original por SHA-256. Para obter credenciais e concluir
-o deploy, siga [o runbook de homologação](docs/homologation-runbook.md). A publicação no Render é
-descrita de forma reproduzível em `render.yaml`.
+Nenhum segredo pode usar prefixo `VITE_`. As listas de operadores e notificados do ambiente são apenas valores iniciais; depois da instalação, as escolhas persistem no banco.
 
-## Aplicativo local Bitrix24
+## Verificação técnica
 
-Publique frontend e backend em HTTPS. Em **Aplicativos > Recursos do desenvolvedor > Aplicativo local**, configure:
-
-```text
-URL da aplicacao: https://seu-backend.com/integrations/bitrix/launch
-Instalacao inicial: https://seu-backend.com/integrations/bitrix/install
-Permissoes: basic, user, crm, sign.b2e
-```
-
-O instalador vira `ADMIN`. Os demais usuarios precisam ser autorizados em **Configuracoes**. Nessa tela tambem sao definidos empresa CRM, provedor, representante, responsavel e tipo regional.
-
-## Verificacao
-
-```bash
-cd backend
-npm.cmd test
+```powershell
+Set-Location backend
+npm.cmd test -- --runInBand
+npm.cmd run lint
 npm.cmd run build
-cd ../frontend
+Set-Location ..\frontend
+npm.cmd run lint
 npm.cmd run build
+Set-Location ..
+npm.cmd run test:local
 ```
 
-Documentacao complementar: [banco](docs/database.md), [Bitrix24](docs/bitrix-flow.md),
-[Supabase](docs/supabase.md), [revisão jurídica](docs/legal-review-checklist.md) e
-[segurança operacional](docs/security-operations.md).
+## Documentação
+
+- [Arquitetura e diagramas do fluxo](docs/architecture.md)
+- [Runbook de homologação e implantação](docs/homologation-runbook.md)
+- [Desenvolvimento local](docs/local-development.md)
+- [Testes por Cloudflare Tunnel](docs/local-cloudflare-tests.md)
+- [Banco de dados](docs/database.md)
+- [Supabase](docs/supabase.md)
+- [ZapSign Sandbox](docs/zapsign-sandbox.md)
+- [Segurança e operação](docs/security-operations.md)
+- [Revisão jurídica](docs/legal-review-checklist.md)
+- [Otimização das imagens Docker](docs/docker-optimization-report.md)
+
+O ambiente atual é de homologação e o documento possui a marca **HOMOLOGAÇÃO — SEM VALIDADE**. Produção exige aprovação jurídica, segredos e projetos separados, template sem a marca e hospedagem de backend que não suspenda por inatividade.

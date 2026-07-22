@@ -6,6 +6,7 @@ import { createHash } from 'crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { basename, join } from 'path';
+import { pathToFileURL } from 'url';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import { PrismaService } from '../prisma/prisma.service';
@@ -27,6 +28,17 @@ export interface ResponsibilityDocumentData {
   }>;
 }
 
+export function libreOfficeConversionArguments(directory: string, input: string) {
+  const profile = pathToFileURL(join(directory, 'libreoffice-profile')).href;
+  return [
+    '--headless',
+    `-env:UserInstallation=${profile}`,
+    '--convert-to', 'pdf',
+    '--outdir', directory,
+    input
+  ];
+}
+
 @Injectable()
 export class DocumentsService {
   constructor(
@@ -37,10 +49,43 @@ export class DocumentsService {
 
   async renderResponsibilityTerm(version: DocumentTemplateVersion, data: ResponsibilityDocumentData) {
     const source = await this.loadTemplate(version);
-    const zip = new PizZip(source);
+    return this.renderSource(source, data);
+  }
+
+  async validateResponsibilityTemplate(source: Buffer) {
+    const rendered = await this.renderSource(source, {
+      employeeName: 'COLABORADOR DE HOMOLOGACAO',
+      cpf: '000.000.000-00',
+      city: 'Sao Paulo',
+      date: new Date('2026-01-15T12:00:00Z'),
+      equipments: [
+        { item: '01', quantity: 1, description: 'Notebook de teste', serialNumber: 'TESTE-001', assetTag: 'HML-001', accessories: 'Carregador' },
+        { item: '02', quantity: 1, description: 'Monitor de teste', serialNumber: 'TESTE-002', assetTag: 'HML-002', accessories: '-' }
+      ]
+    });
+    return {
+      sourceSha256: createHash('sha256').update(source).digest('hex'),
+      previewSha256: rendered.sha256,
+      previewSize: rendered.pdf.length
+    };
+  }
+
+  private async renderSource(source: Buffer, data: ResponsibilityDocumentData) {
+    let zip: PizZip;
+    try {
+      zip = new PizZip(source);
+    } catch {
+      throw new UnprocessableEntityException('O arquivo enviado nao e um DOCX valido');
+    }
     const documentXml = zip.file('word/document.xml')?.asText();
     if (!documentXml) throw new UnprocessableEntityException('Template DOCX sem word/document.xml');
-    zip.file('word/document.xml', parameterizeResponsibilityTemplateXml(documentXml));
+    const parameterizedXml = parameterizeResponsibilityTemplateXml(documentXml);
+    const missingMarkers = ['{employeeName}', '{cpf}', '{#equipments}', '{/equipments}']
+      .filter((marker) => !parameterizedXml.includes(marker));
+    if (missingMarkers.length) {
+      throw new UnprocessableEntityException(`Template sem campos obrigatorios: ${missingMarkers.join(', ')}`);
+    }
+    zip.file('word/document.xml', parameterizedXml);
 
     const month = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' })
       .format(data.date).toLocaleUpperCase('pt-BR');
@@ -98,7 +143,7 @@ export class DocumentsService {
       await writeFile(input, docx);
       const binary = this.config.get<string>('LIBREOFFICE_BIN') || 'libreoffice';
       await new Promise<void>((resolve, reject) => {
-        const process = spawn(binary, ['--headless', '--convert-to', 'pdf', '--outdir', directory, input], {
+        const process = spawn(binary, libreOfficeConversionArguments(directory, input), {
           windowsHide: true,
           stdio: ['ignore', 'pipe', 'pipe']
         });

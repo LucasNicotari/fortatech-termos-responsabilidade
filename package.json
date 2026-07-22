@@ -1,0 +1,23 @@
+{
+  "name": "fortatech-termos-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orquestracao local e testes HTTPS do aplicativo Fortatech Termos",
+  "scripts": {
+    "dev:local": "node scripts/local-development.mjs",
+    "dev:local:build": "node scripts/local-development.mjs --build",
+    "test:local": "node scripts/local-development.mjs --check --build",
+    "local:up": "node scripts/local-development.mjs",
+    "local:status": "docker compose -f docker-compose.yml -f docker-compose.local.yml ps",
+    "local:logs": "docker compose -f docker-compose.yml -f docker-compose.local.yml logs -f backend frontend",
+    "local:down": "docker compose -f docker-compose.yml -f docker-compose.local.yml down",
+    "local:disk": "docker system df",
+    "local:clean-cache": "node scripts/clean-local-cache.mjs",
+    "test:tunnel": "node scripts/cloudflare-tunnel.mjs",
+    "test:tunnel:check": "node scripts/cloudflare-tunnel.mjs --check",
+    "test:remote": "node scripts/verify-remote.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.112.0"
+  }
+}

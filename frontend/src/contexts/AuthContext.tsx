@@ -3,7 +3,7 @@ import { api } from '../services/api';
 
 interface AuthContextValue {
   token: string | null;
-  user: { name: string; email: string; role: string } | null;
+  user: { id?: string; name: string; email: string; role: string; bitrixUserId?: string } | null;
   loading: boolean;
   error: string | null;
   logout: () => void;
@@ -22,12 +22,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const launchCode = new URLSearchParams(window.location.search).get('launchCode');
-    if (!launchCode) {
+    const localMode = import.meta.env.VITE_LOCAL_DEVELOPMENT_MODE === 'true';
+    if (!launchCode && !localMode) {
       setLoading(false);
       return;
     }
-    window.history.replaceState({}, '', window.location.pathname);
-    api.post('/auth/bitrix/exchange', { code: launchCode })
+    if (launchCode) window.history.replaceState({}, '', window.location.pathname);
+    const request = launchCode
+      ? api.post('/auth/bitrix/exchange', { code: launchCode })
+      : api.post('/auth/local');
+    request
       .then(({ data }) => {
         sessionStorage.setItem('fortatech.token', data.accessToken);
         sessionStorage.setItem('fortatech.user', JSON.stringify(data.user));
@@ -43,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem('fortatech.user');
     setToken(null);
     setUser(null);
+    if (import.meta.env.VITE_LOCAL_DEVELOPMENT_MODE === 'true') window.location.reload();
   }
 
   const value = useMemo(() => ({ token, user, loading, error, logout }), [token, user, loading, error]);

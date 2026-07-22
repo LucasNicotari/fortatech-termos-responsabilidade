@@ -5,11 +5,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: '#1f2933',
-        steel: '#52616b',
-        mint: '#2a9d8f',
-        amber: '#e9a03b',
-        coral: '#d85c4a'
+        ink: '#525c69',
+        steel: '#6a737f',
+        mint: '#2fc6f6',
+        amber: '#f5a623',
+        coral: '#ff5752',
+        b24: {
+          bg: '#eef2f4',
+          border: '#dfe3e8',
+          blue: '#2fc6f6',
+          'blue-dark': '#19a9d5',
+          green: '#9dcf00'
+        }
       }
     }
   },

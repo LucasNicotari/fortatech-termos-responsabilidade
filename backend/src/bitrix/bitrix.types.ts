@@ -16,8 +16,23 @@ export interface BitrixUser {
   LAST_NAME?: string;
   EMAIL?: string;
   WORK_POSITION?: string;
+  PERSONAL_PHOTO?: string;
   UF_DEPARTMENT?: number[];
-  ACTIVE?: boolean;
+  DEPARTMENT_NAME?: string;
+  ACTIVE?: boolean | 'Y' | 'N';
+}
+
+export interface BitrixDepartment {
+  ID: string;
+  NAME: string;
+  PARENT?: string;
+}
+
+export interface BitrixEventHandler {
+  event: string;
+  handler: string;
+  auth_type?: string;
+  offline?: number;
 }
 
 export interface BitrixMember {
@@ -43,16 +58,4 @@ export interface BitrixSafeDocument {
   member_id: number;
   role: string;
   file_url: string;
-}
-
-export interface BitrixSendSignatureInput {
-  externalId: string;
-  fileName: string;
-  pdf: Buffer;
-  companyCrmId: number;
-  employeeUserId: number;
-  companySignerUserId: number;
-  responsibleUserId: number;
-  companyProviderUid: string;
-  regionDocumentType: string;
 }

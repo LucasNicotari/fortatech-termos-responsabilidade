@@ -1,13 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post, Put, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { UserRole } from '@prisma/client';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateTemplateDto } from './dto/create-template.dto';
-import { UpdateTemplateDto } from './dto/update-template.dto';
-import { TemplatesService } from './templates.service';
+import { CurrentUser } from '../common/current-user.decorator';
+import { Roles } from '../common/roles.decorator';
+import { RolesGuard } from '../common/roles.guard';
+import { TemplatesService, UploadedDocx } from './templates.service';
 
 @ApiTags('templates')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
 @Controller('templates')
 export class TemplatesController {
   constructor(private readonly templates: TemplatesService) {}
@@ -17,18 +21,39 @@ export class TemplatesController {
     return this.templates.findAll();
   }
 
-  @Post()
-  create(@Body() dto: CreateTemplateDto) {
-    return this.templates.create(dto);
+  @Post('upload')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
+  upload(
+    @UploadedFile() file: UploadedDocx | undefined,
+    @Body() body: Record<string, string | undefined>,
+    @CurrentUser() user: { id: string }
+  ) {
+    return this.templates.upload(file, {
+      templateId: body.templateId || undefined,
+      name: body.name || undefined,
+      version: body.version || '',
+      description: body.description || undefined,
+      makeDefault: body.makeDefault !== 'false'
+    }, user.id);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateTemplateDto) {
-    return this.templates.update(id, dto);
+  @Put('versions/:id/default')
+  setDefault(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return this.templates.setDefault(id, user.id);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.templates.remove(id);
+  @Patch('versions/:id')
+  setVersionActive(
+    @Param('id') id: string,
+    @Body('active') active: boolean,
+    @CurrentUser() user: { id: string }
+  ) {
+    return this.templates.setVersionActive(id, Boolean(active), user.id);
+  }
+
+  @Get('versions/:id/source')
+  source(@Param('id') id: string) {
+    return this.templates.sourceUrl(id);
   }
 }

@@ -10,6 +10,10 @@ export class HealthController {
   @Get()
   async check() {
     await this.prisma.$queryRaw`SELECT 1`;
-    return { status: 'ok', database: 'reachable' };
+    return {
+      status: 'ok',
+      database: 'reachable',
+      revision: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local'
+    };
   }
 }

@@ -11,11 +11,6 @@ import { SignaturesService } from './signatures.service';
 export class SignaturesController {
   constructor(private readonly signatures: SignaturesService) {}
 
-  @Get()
-  findAll() {
-    return this.signatures.findAll();
-  }
-
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.signatures.findOne(id);

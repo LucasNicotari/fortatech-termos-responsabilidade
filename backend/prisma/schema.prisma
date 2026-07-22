@@ -16,29 +16,6 @@ enum UserRole {
   @@map("app_user_role")
 }
 
-enum EmployeeStatus {
-  ACTIVE
-  INACTIVE
-  PENDING
-
-  @@map("app_employee_status")
-}
-
-enum InvitationStatus {
-  UNKNOWN
-  INVITED
-  ACCEPTED
-
-  @@map("app_invitation_status")
-}
-
-enum SendBatchType {
-  MANUAL
-  AUTOMATIC
-
-  @@map("app_send_batch_type")
-}
-
 enum SendTriggerType {
   BITRIX_INVITE_ACCEPTED
   MANUAL
@@ -85,6 +62,13 @@ enum SignatureStatus {
   @@map("app_signature_status")
 }
 
+enum SignatureProvider {
+  BITRIX
+  ZAPSIGN
+
+  @@map("app_signature_provider")
+}
+
 enum ArchiveStatus {
   NOT_REQUIRED
   PENDING
@@ -104,44 +88,53 @@ enum WebhookProcessingStatus {
 }
 
 model User {
-  id           String             @id @default(cuid())
-  name         String
-  email        String             @unique
-  passwordHash String?            @map("password_hash")
-  bitrixUserId String?            @unique @map("bitrix_user_id")
-  role         UserRole           @default(ADMIN)
-  active       Boolean            @default(true)
-  lastLoginAt  DateTime?          @map("last_login_at")
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
-  sendBatches  SendBatch[]        @relation("RequestedBatches")
-  sendRequests SendRequest[]      @relation("RequestedSendRequests")
-  auditEvents  AuditEvent[]       @relation("AuditActor")
-  settings     Setting[]          @relation("SettingUpdater")
-  launchCodes  BitrixLaunchCode[]
+  id                          String                    @id @default(cuid())
+  name                        String
+  email                       String                    @unique
+  bitrixUserId                String?                   @unique @map("bitrix_user_id")
+  role                        UserRole                  @default(ADMIN)
+  active                      Boolean                   @default(true)
+  lastLoginAt                 DateTime?                 @map("last_login_at")
+  createdAt                   DateTime                  @default(now()) @map("created_at")
+  updatedAt                   DateTime                  @updatedAt @map("updated_at")
+  sendRequests                SendRequest[]             @relation("RequestedSendRequests")
+  auditEvents                 AuditEvent[]              @relation("AuditActor")
+  settings                    Setting[]                 @relation("SettingUpdater")
+  launchCodes                 BitrixLaunchCode[]
+  workflowParticipantsUpdated TermWorkflowParticipant[] @relation("WorkflowParticipantUpdater")
 
   @@map("app_users")
 }
 
-model Employee {
-  id               String           @id @default(cuid())
-  bitrixId         String?          @unique @map("bitrix_id")
-  nome             String
-  email            String           @unique
-  cpf              String?          @unique
-  empresa          String?
-  cargo            String?
-  departamento     String?
-  status           EmployeeStatus   @default(ACTIVE)
-  invitationStatus InvitationStatus @default(UNKNOWN) @map("invitation_status")
-  acceptedAt       DateTime?        @map("accepted_at")
-  sendRequests     SendRequest[]
-  signatures       Signature[]
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
+model TermWorkflowParticipant {
+  id                   String   @id @default(cuid())
+  bitrixUserId         String   @unique @map("bitrix_user_id")
+  canOperate           Boolean  @default(false) @map("can_operate")
+  receiveNotifications Boolean  @default(false) @map("receive_notifications")
+  updatedByUserId      String?  @map("updated_by_user_id")
+  updatedBy            User?    @relation("WorkflowParticipantUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
-  @@index([status])
-  @@index([invitationStatus])
+  @@index([canOperate])
+  @@index([receiveNotifications])
+  @@index([updatedByUserId])
+  @@map("app_term_workflow_participants")
+}
+
+model Employee {
+  id           String        @id @default(cuid())
+  bitrixId     String?       @unique @map("bitrix_id")
+  nome         String
+  email        String        @unique
+  cpf          String?       @unique
+  cargo        String?
+  departamento String?
+  sendRequests SendRequest[]
+  signatures   Signature[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
   @@map("app_employees")
 }
 
@@ -163,7 +156,6 @@ model DocumentTemplateVersion {
   template          DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   versao            String
   descricao         String?
-  bitrixTemplateId  String?          @map("bitrix_template_id")
   sourceStoragePath String?          @map("source_storage_path")
   sourceSha256      String?          @map("source_sha256")
   isDefault         Boolean          @default(false) @map("is_default")
@@ -174,76 +166,54 @@ model DocumentTemplateVersion {
   updatedAt         DateTime         @updatedAt @map("updated_at")
 
   @@unique([templateId, versao])
-  @@index([bitrixTemplateId])
   @@index([isDefault, ativo])
   @@map("app_document_template_versions")
 }
 
-model SendBatch {
-  id                String        @id @default(cuid())
-  name              String
-  type              SendBatchType @default(MANUAL)
-  requestedByUserId String?       @map("requested_by_user_id")
-  requestedBy       User?         @relation("RequestedBatches", fields: [requestedByUserId], references: [id], onDelete: SetNull)
-  sendRequests      SendRequest[]
-  createdAt         DateTime      @default(now()) @map("created_at")
-
-  @@index([type])
-  @@index([requestedByUserId])
-  @@map("app_send_batches")
-}
-
 model SendRequest {
-  id                    String                  @id @default(cuid())
-  employeeId            String                  @map("employee_id")
-  employee              Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  templateVersionId     String                  @map("template_version_id")
-  templateVersion       DocumentTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
-  batchId               String?                 @map("batch_id")
-  batch                 SendBatch?              @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  triggerType           SendTriggerType         @map("trigger_type")
-  status                SendRequestStatus       @default(PENDING)
-  scheduledAt           DateTime?               @map("scheduled_at")
-  requestedByUserId     String?                 @map("requested_by_user_id")
-  requestedBy           User?                   @relation("RequestedSendRequests", fields: [requestedByUserId], references: [id], onDelete: SetNull)
-  requestedAt           DateTime                @default(now()) @map("requested_at")
-  sentAt                DateTime?               @map("sent_at")
-  canceledAt            DateTime?               @map("canceled_at")
-  failureReason         String?                 @map("failure_reason")
-  documentData          Json?                   @map("document_data")
-  documentFileName      String?                 @map("document_file_name")
-  unsignedStoragePath   String?                 @map("unsigned_storage_path")
-  unsignedSha256        String?                 @map("unsigned_sha256")
-  employeeSnapshot      Json?                   @map("employee_snapshot")
-  companySignerBitrixId String?                 @map("company_signer_bitrix_id")
-  responsibleBitrixId   String?                 @map("responsible_bitrix_id")
-  lockedAt              DateTime?               @map("locked_at")
-  attempts              SendAttempt[]
-  signatures            Signature[]
-  equipment             SendRequestEquipment[]
-  createdAt             DateTime                @default(now()) @map("created_at")
-  updatedAt             DateTime                @updatedAt @map("updated_at")
+  id                  String                  @id @default(cuid())
+  employeeId          String                  @map("employee_id")
+  employee            Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  templateVersionId   String                  @map("template_version_id")
+  templateVersion     DocumentTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  triggerType         SendTriggerType         @map("trigger_type")
+  status              SendRequestStatus       @default(PENDING)
+  requestedByUserId   String?                 @map("requested_by_user_id")
+  requestedBy         User?                   @relation("RequestedSendRequests", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  requestedAt         DateTime                @default(now()) @map("requested_at")
+  sentAt              DateTime?               @map("sent_at")
+  canceledAt          DateTime?               @map("canceled_at")
+  failureReason       String?                 @map("failure_reason")
+  documentData        Json?                   @map("document_data")
+  documentFileName    String?                 @map("document_file_name")
+  unsignedStoragePath String?                 @map("unsigned_storage_path")
+  unsignedSha256      String?                 @map("unsigned_sha256")
+  employeeSnapshot    Json?                   @map("employee_snapshot")
+  lockedAt            DateTime?               @map("locked_at")
+  attempts            SendAttempt[]
+  signatures          Signature[]
+  equipment           SendRequestEquipment[]
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
 
   @@index([employeeId])
   @@index([templateVersionId])
-  @@index([batchId])
   @@index([triggerType])
   @@index([status])
-  @@index([scheduledAt])
   @@index([requestedByUserId])
   @@map("app_send_requests")
 }
 
 model SendAttempt {
-  id             String            @id @default(cuid())
-  sendRequestId  String            @map("send_request_id")
-  sendRequest    SendRequest       @relation(fields: [sendRequestId], references: [id], onDelete: Cascade)
-  attemptNumber  Int               @map("attempt_number")
-  status         SendAttemptStatus @default(SENDING)
-  startedAt      DateTime          @default(now()) @map("started_at")
-  finishedAt     DateTime?         @map("finished_at")
-  bitrixResponse Json?             @map("bitrix_response")
-  error          String?
+  id               String            @id @default(cuid())
+  sendRequestId    String            @map("send_request_id")
+  sendRequest      SendRequest       @relation(fields: [sendRequestId], references: [id], onDelete: Cascade)
+  attemptNumber    Int               @map("attempt_number")
+  status           SendAttemptStatus @default(SENDING)
+  startedAt        DateTime          @default(now()) @map("started_at")
+  finishedAt       DateTime?         @map("finished_at")
+  providerResponse Json?             @map("provider_response")
+  error            String?
 
   @@unique([sendRequestId, attemptNumber])
   @@index([status])
@@ -258,6 +228,8 @@ model Signature {
   employee             Employee                 @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   templateVersionId    String?                  @map("template_version_id")
   templateVersion      DocumentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  provider             SignatureProvider        @default(BITRIX)
+  providerDocumentId   String?                  @unique @map("provider_document_id")
   bitrixDocumentId     String?                  @map("bitrix_document_id")
   bitrixDocumentUid    String?                  @unique @map("bitrix_document_uid")
   bitrixSignId         String?                  @unique @map("bitrix_sign_id")
@@ -287,6 +259,7 @@ model Signature {
   @@index([sendRequestId])
   @@index([employeeId])
   @@index([templateVersionId])
+  @@index([provider, status])
   @@index([status])
   @@index([bitrixStage])
   @@index([archiveStatus])
@@ -366,7 +339,6 @@ model WebhookEvent {
   externalEventId  String?                 @map("external_event_id")
   payload          Json
   processingStatus WebhookProcessingStatus @default(RECEIVED) @map("processing_status")
-  processed        Boolean                 @default(false)
   error            String?
   createdAt        DateTime                @default(now()) @map("created_at")
   processedAt      DateTime?               @map("processed_at")

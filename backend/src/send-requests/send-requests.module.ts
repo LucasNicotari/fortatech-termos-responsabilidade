@@ -5,9 +5,12 @@ import { StorageModule } from '../storage/storage.module';
 import { LogsModule } from '../logs/logs.module';
 import { SendRequestsController } from './send-requests.controller';
 import { SendRequestsService } from './send-requests.service';
+import { SignatureProvidersModule } from '../signature-providers/signature-providers.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { WorkflowModule } from '../workflow/workflow.module';
 
 @Module({
-  imports: [BitrixModule, LogsModule, DocumentsModule, StorageModule],
+  imports: [BitrixModule, LogsModule, DocumentsModule, StorageModule, SignatureProvidersModule, NotificationsModule, WorkflowModule],
   controllers: [SendRequestsController],
   providers: [SendRequestsService],
   exports: [SendRequestsService]

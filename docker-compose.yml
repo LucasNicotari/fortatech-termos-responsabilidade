@@ -43,7 +43,9 @@ services:
       RESPONSIBILITY_TEMPLATE_PATH: /templates/term.docx
       LIBREOFFICE_BIN: libreoffice
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       BACKEND_PORT: ${BACKEND_PORT:-3000}
+      LOCAL_DEVELOPMENT_MODE: ${LOCAL_DEVELOPMENT_MODE:-false}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     volumes:
@@ -57,6 +59,7 @@ services:
       context: ./frontend
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        VITE_LOCAL_DEVELOPMENT_MODE: ${VITE_LOCAL_DEVELOPMENT_MODE:-false}
     container_name: fortatech-termos-frontend
     restart: unless-stopped
     depends_on:

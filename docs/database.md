@@ -1,72 +1,62 @@
-# Banco de Dados
+# Banco de dados
 
-O banco da aplicacao fica no schema `public` do Supabase e usa tabelas fisicas com prefixo `app_`. Os schemas internos do Supabase nao devem ser alterados.
+O schema funcional fica em `public` e contém 16 tabelas com prefixo `app_`. Os schemas internos do Supabase não são modificados.
 
-## ERD
+## Relacionamentos principais
 
 ```mermaid
 erDiagram
-  app_users ||--o{ app_send_batches : requests
-  app_users ||--o{ app_send_requests : requests
-  app_users ||--o{ app_audit_events : acts
-  app_users ||--o{ app_settings : updates
-  app_employees ||--o{ app_send_requests : receives
-  app_employees ||--o{ app_signatures : signs
-  app_document_templates ||--o{ app_document_template_versions : versions
-  app_document_template_versions ||--o{ app_send_requests : selected_for
-  app_document_template_versions ||--o{ app_signatures : used_by
-  app_send_batches ||--o{ app_send_requests : groups
-  app_send_requests ||--o{ app_send_attempts : attempts
-  app_send_requests ||--o{ app_signatures : creates
-  app_signatures ||--o{ app_signature_events : timeline
-  app_send_requests ||--o{ app_send_request_equipment : contains
-  app_users ||--o{ app_bitrix_launch_codes : exchanges
+  app_users ||--o{ app_send_requests : solicita
+  app_users ||--o{ app_audit_events : executa
+  app_users ||--o{ app_bitrix_launch_codes : recebe
+  app_users ||--o{ app_term_workflow_participants : atualiza
+  app_employees ||--o{ app_send_requests : recebe
+  app_employees ||--o{ app_signatures : assina
+  app_document_templates ||--o{ app_document_template_versions : possui
+  app_document_template_versions ||--o{ app_send_requests : gera
+  app_document_template_versions ||--o{ app_signatures : referencia
+  app_send_requests ||--o{ app_send_request_equipment : contém
+  app_send_requests ||--o{ app_send_attempts : tenta
+  app_send_requests ||--o{ app_signatures : inicia
+  app_signatures ||--o{ app_signature_events : registra
 ```
 
 ## Tabelas
 
-- `app_users`: usuarios internos RH/TI/Admin e autenticacao JWT propria.
-- `app_employees`: colaboradores sincronizados do Bitrix24 ou cadastrados manualmente.
-- `app_document_templates`: documento logico, como Termo de Responsabilidade.
-- `app_document_template_versions`: versoes do documento e ID do template no Bitrix24.
-- `app_send_batches`: agrupador opcional para envios manuais em lote.
-- `app_send_requests`: centro do fluxo; registra quem recebe, qual modelo e quando enviar.
-- `app_send_attempts`: tentativas tecnicas de envio ao Bitrix24.
-- `app_signatures`: acompanhamento normalizado da assinatura oficial no Bitrix24.
-- `app_signature_events`: linha do tempo de eventos de assinatura.
-- `app_webhook_events`: payload bruto recebido do Bitrix24.
-- `app_integration_logs`: logs tecnicos de integracao.
-- `app_audit_events`: auditoria administrativa.
-- `app_settings`: configuracoes operacionais nao sensiveis.
-- `app_send_request_equipment`: snapshot imutavel dos equipamentos de cada termo.
-- `app_bitrix_installations`: instalacao, endpoints e tokens OAuth cifrados.
-- `app_bitrix_launch_codes`: codigos de inicializacao de uso unico.
+| Tabela | Responsabilidade |
+|---|---|
+| `app_users` | Identidade interna vinculada ao ID Bitrix, perfil e estado de acesso |
+| `app_term_workflow_participants` | Operadores e destinatários de notificações editáveis |
+| `app_employees` | Snapshot mínimo do colaborador usado nos termos |
+| `app_document_templates` | Tipo lógico do documento |
+| `app_document_template_versions` | Versões imutáveis do DOCX e hash da origem |
+| `app_send_requests` | Agregado central do termo, estado e PDF não assinado |
+| `app_send_request_equipment` | Equipamentos imutáveis do termo |
+| `app_send_attempts` | Tentativas técnicas de envio ao provedor |
+| `app_signatures` | Estado normalizado da assinatura e do arquivamento |
+| `app_signature_events` | Linha do tempo e deduplicação de avisos |
+| `app_webhook_events` | Eventos externos sanitizados e idempotentes |
+| `app_bitrix_installations` | Instalação e tokens OAuth cifrados |
+| `app_bitrix_launch_codes` | Códigos de login de uso único e curta duração |
+| `app_integration_logs` | Diagnóstico técnico sem CPF, documento ou tokens |
+| `app_audit_events` | Auditoria de configurações e templates |
+| `app_settings` | Configurações operacionais não secretas |
 
-## Enums
+Estruturas antigas de lote, senha local, empresa, convite e participantes duplicados foram removidas pela migration `20260722153000_remove_redundant_fields`.
 
-- `app_user_role`: `ADMIN`, `RH`, `TI`.
-- `app_employee_status`: `ACTIVE`, `INACTIVE`, `PENDING`.
-- `app_invitation_status`: `UNKNOWN`, `INVITED`, `ACCEPTED`.
-- `app_send_batch_type`: `MANUAL`, `AUTOMATIC`.
-- `app_send_trigger_type`: `BITRIX_INVITE_ACCEPTED`, `MANUAL`, `RETRY`.
-- `app_send_request_status`: inclui `DRAFT`, `READY`, `SENT`, `IN_PROGRESS`, `DECLINED`, `FAILED` e estados legados.
-- `app_send_attempt_status`: `SENDING`, `SUCCESS`, `FAILED`.
-- `app_signature_status`: `PENDING`, `SENT`, `VIEWED`, `IN_PROGRESS`, `SIGNED`, `FINISHED`, `DECLINED`, `ERROR`, `CANCELED`.
-- `app_archive_status`: `NOT_REQUIRED`, `PENDING`, `ARCHIVED`, `FAILED`.
-- `app_webhook_processing_status`: `RECEIVED`, `PROCESSED`, `FAILED`, `IGNORED`.
+## Regras
 
-## Regras importantes
+- O snapshot de pessoa e equipamentos preserva o conteúdo usado no momento do envio.
+- Depois de enviado, o termo fica bloqueado para edição.
+- Apenas uma tentativa pode reivindicar um termo `READY`; a atualização atômica impede envio duplo.
+- O token externo da assinatura é único e o evento externo possui chave idempotente.
+- O PDF concluído só fica `ARCHIVED` depois de upload privado e cálculo de SHA-256.
+- RLS está habilitado em todas as tabelas `app_*` e `anon`/`authenticated` não possuem DML.
 
-- Toda assinatura oficial permanece no Bitrix24.
-- `app_send_requests` deve existir antes de uma assinatura iniciada pelo sistema.
-- `app_signatures.bitrix_stage` guarda o estagio real do Bitrix24.
-- `app_signature_events` e `app_webhook_events` sao trilha de auditoria.
-- RLS fica habilitado nas tabelas `app_*`; o acesso da aplicacao passa pelo backend.
-- `anon` e `authenticated` nao recebem privilegios nas tabelas internas.
+## Migrations
 
-## Politica de migrations
-
-- Como o Supabase estava vazio, a migration inicial cria todo o schema de aplicacao.
-- Depois de aplicada em ambiente remoto, uma migration existente nao deve ser editada.
-- Mudancas futuras devem ser novas migrations.
-- Reset destrutivo em Supabase remoto exige backup e aprovacao explicita.
+- Migrations já aplicadas nunca são editadas; toda mudança recebe uma nova pasta versionada.
+- `DIRECT_URL` é usada para `prisma migrate deploy`.
+- `DATABASE_URL` com pooler é usada no runtime.
+- `prisma migrate reset` é proibido no projeto remoto.
+- Exclusão ou alteração destrutiva exige auditoria de dados, backup e janela controlada.

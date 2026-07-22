@@ -2,12 +2,24 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
+import { libreOfficeConversionArguments } from './documents.service';
 import {
   parameterizeResponsibilityTemplateXml,
   visibleTemplateText
 } from './template-parameterizer';
 
 describe('DocumentsService template parameterization', () => {
+  it('uses an isolated writable LibreOffice profile for each conversion', () => {
+    const first = libreOfficeConversionArguments('/tmp/conversion-a', '/tmp/conversion-a/term.docx');
+    const second = libreOfficeConversionArguments('/tmp/conversion-b', '/tmp/conversion-b/term.docx');
+
+    expect(first[1]).toMatch(/^-env:UserInstallation=file:\/\//);
+    expect(first[1]).toContain('conversion-a/libreoffice-profile');
+    expect(second[1]).toContain('conversion-b/libreoffice-profile');
+    expect(first[1]).not.toBe(second[1]);
+    expect(first).toEqual(expect.arrayContaining(['--headless', '--convert-to', 'pdf']));
+  });
+
   it('replaces legacy identity fields and converts equipment rows into a loop', () => {
     const paragraph = (text: string) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
     const cell = (text: string) => `<w:tc>${paragraph(text)}</w:tc>`;

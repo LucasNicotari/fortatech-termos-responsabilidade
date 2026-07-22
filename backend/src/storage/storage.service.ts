@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, ServiceUnavailableException } from '@n
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { isAbsolute, join, normalize, resolve } from 'path';
 
 @Injectable()
@@ -60,6 +60,20 @@ export class StorageService {
     const { data, error } = await this.client!.storage.from(this.bucket).download(path);
     if (error || !data) throw new ServiceUnavailableException(`Falha ao baixar do Supabase Storage: ${error?.message || 'arquivo ausente'}`);
     return Buffer.from(await data.arrayBuffer());
+  }
+
+  async remove(path: string) {
+    await this.ensureBucket();
+    if (this.driver === 'local') {
+      try {
+        await unlink(this.localFile(path));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      return;
+    }
+    const { error } = await this.client!.storage.from(this.bucket).remove([path]);
+    if (error) throw new ServiceUnavailableException(`Falha ao remover arquivo do Supabase Storage: ${error.message}`);
   }
 
   async createSignedUrl(path: string, expiresIn = 300) {

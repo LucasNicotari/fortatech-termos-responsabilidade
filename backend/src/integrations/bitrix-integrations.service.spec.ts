@@ -1,5 +1,23 @@
 import { Prisma } from '@prisma/client';
-import { BitrixIntegrationsService } from './bitrix-integrations.service';
+import { BitrixIntegrationsService, resolveBitrixExpiry } from './bitrix-integrations.service';
+
+describe('resolveBitrixExpiry', () => {
+  const now = Date.parse('2026-07-21T12:00:00.000Z');
+
+  it('accepts duration seconds from a server callback', () => {
+    expect(resolveBitrixExpiry(3600, now).toISOString()).toBe('2026-07-21T13:00:00.000Z');
+  });
+
+  it('accepts the millisecond timestamp returned by BX24.getAuth', () => {
+    const expiration = now + 45 * 60 * 1000;
+    expect(resolveBitrixExpiry(expiration, now).getTime()).toBe(expiration);
+  });
+
+  it('accepts a Date serialized by a browser form', () => {
+    expect(resolveBitrixExpiry('Tue, 21 Jul 2026 13:00:00 GMT', now).toISOString())
+      .toBe('2026-07-21T13:00:00.000Z');
+  });
+});
 
 describe('BitrixIntegrationsService events', () => {
   const installation = {
@@ -87,5 +105,75 @@ describe('BitrixIntegrationsService events', () => {
     payload.auth.application_token = 'wrong';
 
     await expect(service.handleEvent(payload)).rejects.toThrow('Evento Bitrix24 invalido');
+  });
+});
+
+describe('BitrixIntegrationsService installation', () => {
+  it('does not register event handlers that are already installed', async () => {
+    const prisma = {
+      bitrixInstallation: { upsert: jest.fn().mockResolvedValue({ id: 'installation-1' }) },
+      user: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'user-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'user-1' })
+      }
+    };
+    const handler = 'https://backend.example.com/integrations/bitrix/events';
+    const events = ['OnAppInstall', 'OnAppUninstall'];
+    const bitrix = {
+      getCurrentUser: jest.fn().mockResolvedValue({ ID: '1', NAME: 'Admin' }),
+      listBoundEvents: jest.fn().mockResolvedValue(events.map((event) => ({ event: event.toUpperCase(), handler }))),
+      bindEvent: jest.fn()
+    };
+    const crypto = { encrypt: jest.fn((value: string) => `encrypted-${value}`), hash: jest.fn() };
+    const config = { get: jest.fn((key: string) => {
+      if (key === 'PUBLIC_BACKEND_URL') return 'https://backend.example.com';
+      if (key === 'BITRIX_PORTAL_ORIGIN') return 'https://company.bitrix24.com';
+      return undefined;
+    }) };
+    const service = new BitrixIntegrationsService(
+      prisma as never, bitrix as never, crypto as never, config as never, {} as never
+    );
+
+    const result = await service.install({
+      access_token: 'access', refresh_token: 'refresh', domain: 'company.bitrix24.com',
+      member_id: 'member-1', expires_in: 3600
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(bitrix.bindEvent).not.toHaveBeenCalled();
+  });
+
+  it('registers only application lifecycle events for the ZapSign workflow', async () => {
+    const prisma = {
+      bitrixInstallation: { upsert: jest.fn().mockResolvedValue({ id: 'installation-1' }) },
+      user: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'user-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'user-1' })
+      }
+    };
+    const bitrix = {
+      getCurrentUser: jest.fn().mockResolvedValue({ ID: '1', NAME: 'Admin' }),
+      listBoundEvents: jest.fn().mockResolvedValue([]),
+      bindEvent: jest.fn().mockResolvedValue(true)
+    };
+    const config = { get: jest.fn((key: string) => {
+      if (key === 'PUBLIC_BACKEND_URL') return 'https://backend.example.com';
+      if (key === 'BITRIX_PORTAL_ORIGIN') return 'https://company.bitrix24.com';
+      return undefined;
+    }) };
+    const service = new BitrixIntegrationsService(
+      prisma as never,
+      bitrix as never,
+      { encrypt: jest.fn((value: string) => `encrypted-${value}`), hash: jest.fn() } as never,
+      config as never,
+      {} as never
+    );
+
+    await service.install({
+      access_token: 'access', refresh_token: 'refresh', domain: 'company.bitrix24.com',
+      member_id: 'member-1', expires_in: 3600
+    });
+
+    expect(bitrix.bindEvent.mock.calls.map(([event]) => event)).toEqual(['OnAppInstall', 'OnAppUninstall']);
   });
 });

@@ -5,9 +5,14 @@ services:
       DIRECT_URL: postgresql://fortatech:fortatech@postgres:5432/fortatech_termos?schema=public
       STORAGE_DRIVER: local
       LOCAL_STORAGE_PATH: /app/storage-data
-      PUBLIC_BACKEND_URL: http://localhost:3000
+      PUBLIC_BACKEND_URL: ${PUBLIC_BACKEND_URL:-http://localhost:3000}
+      LOCAL_DEVELOPMENT_MODE: "true"
     volumes:
       - local_storage_data:/app/storage-data
+  frontend:
+    build:
+      args:
+        VITE_LOCAL_DEVELOPMENT_MODE: "true"
 
 volumes:
   local_storage_data:

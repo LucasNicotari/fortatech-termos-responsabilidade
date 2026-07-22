@@ -7,25 +7,10 @@ export interface Employee {
   nome: string;
   email: string;
   cpf?: string;
-  empresa?: string;
   cargo?: string;
   departamento?: string;
-  status: string;
-  invitationStatus?: string;
-  acceptedAt?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface Template {
-  id: string;
-  nome: string;
-  versao: string;
-  descricao?: string;
-  templateVersionId?: string;
-  isDefault?: boolean;
-  ativo: boolean;
-  createdAt: string;
 }
 
 export interface SendRequest {
@@ -42,13 +27,13 @@ export interface SendRequest {
   };
   triggerType: string;
   status: SendRequestStatus;
-  scheduledAt?: string;
   requestedAt: string;
   sentAt?: string;
   failureReason?: string;
   documentFileName?: string;
   unsignedSha256?: string;
   equipment?: Equipment[];
+  signatures?: Signature[];
   createdAt: string;
   updatedAt: string;
 }
@@ -57,6 +42,8 @@ export interface Signature {
   id: string;
   employee?: Employee;
   employeeId: string;
+  provider?: 'BITRIX' | 'ZAPSIGN';
+  providerDocumentId?: string;
   bitrixDocumentId?: string;
   bitrixDocumentUid?: string;
   bitrixSignId?: string;
@@ -88,16 +75,17 @@ export interface BitrixEmployee {
   LAST_NAME?: string;
   EMAIL?: string;
   WORK_POSITION?: string;
+  PERSONAL_PHOTO?: string;
+  UF_DEPARTMENT?: number[];
+  DEPARTMENT_NAME?: string;
 }
 
-export interface IntegrationLog {
+export interface ActivityLog {
   id: string;
-  type: string;
-  source: string;
-  endpoint?: string;
-  payload?: unknown;
-  response?: unknown;
-  error?: string;
+  actor: string;
+  action: string;
+  context?: string;
+  status: 'SUCCESS' | 'ERROR';
   createdAt: string;
 }
 
@@ -107,7 +95,5 @@ export interface DashboardSummary {
   sent: number;
   signed: number;
   errors: number;
-  latestEvents: Array<{ id: string; eventType?: string; processed: boolean; error?: string; createdAt: string }>;
   latestSignatures: Signature[];
-  byStatus: Array<{ status: SignatureStatus; total: number }>;
 }

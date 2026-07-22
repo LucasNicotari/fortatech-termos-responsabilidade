@@ -31,10 +31,24 @@ services:
       - key: BITRIX_CLIENT_SECRET
         sync: false
       - key: BITRIX_PORTAL_ORIGIN
-        value: https://*.bitrix24.com https://*.bitrix24.com.br
+        value: https://fortaeqt.bitrix24.com.br
+      - key: BITRIX_TERM_OPERATOR_USER_IDS
+        value: "8243,8465"
+      - key: BITRIX_TERM_NOTIFICATION_USER_IDS
+        value: "7718,8137"
+      - key: SIGNATURE_PROVIDER
+        value: zapsign
+      - key: ZAPSIGN_API_URL
+        value: https://sandbox.api.zapsign.com.br/api/v1
+      - key: ZAPSIGN_API_TOKEN
+        sync: false
+      - key: ZAPSIGN_WEBHOOK_SECRET
+        sync: false
       - key: PUBLIC_BACKEND_URL
         value: https://fortatech-termos-api-hml.onrender.com
       - key: FRONTEND_URL
+        value: https://fortatech-termos-web-hml.onrender.com
+      - key: CORS_ORIGINS
         value: https://fortatech-termos-web-hml.onrender.com
       - key: RESPONSIBILITY_TEMPLATE_PATH
         value: /templates/term.docx
@@ -54,7 +68,7 @@ services:
     headers:
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; connect-src 'self' https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors https://*.bitrix24.com https://*.bitrix24.com.br; base-uri 'none'"
+        value: "default-src 'self'; connect-src 'self' https://fortatech-termos-api-hml.onrender.com; img-src 'self' data: https://fortaeqt.bitrix24.com.br; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors https://fortaeqt.bitrix24.com.br; base-uri 'none'; form-action 'self'"
       - path: /*
         name: Referrer-Policy
         value: no-referrer

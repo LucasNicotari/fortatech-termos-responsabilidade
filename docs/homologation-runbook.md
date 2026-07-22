@@ -1,93 +1,169 @@
-# Runbook de homologação
+# Runbook de homologação e implantação
 
-Não envie credenciais pelo chat, não as grave no Git e não use dados reais de colaboradores na
-homologação. Preencha segredos diretamente no `.env` local e no painel do Render.
+Este procedimento publica o ambiente de testes permanente e o conecta ao aplicativo local do portal `fortaeqt.bitrix24.com.br`. Não use dados de colaboradores reais, exceto o endereço autorizado para o teste controlado. O CPF, os patrimônios e o conteúdo do teste devem ser sintéticos.
 
-## 1. Validação local
+## 1. Portão técnico local
 
 ```powershell
 docker info
-docker compose -f docker-compose.yml -f docker-compose.local.yml up --build -d
-docker compose -f docker-compose.yml -f docker-compose.local.yml ps
-Invoke-WebRequest http://localhost:3000/health -UseBasicParsing
-Invoke-WebRequest http://localhost:5173 -UseBasicParsing
+npm.cmd run test:local
+
+Set-Location backend
+npm.cmd test -- --runInBand
+npm.cmd run lint
+npm.cmd run build
+
+Set-Location ..\frontend
+npm.cmd run lint
+npm.cmd run build
+
+Set-Location ..
+git diff --check
 powershell -ExecutionPolicy Bypass -File scripts/check-homologation.ps1 -Mode local
 ```
 
-## 2. Supabase `fortatech-termos-hml`
+Critérios: testes sem falhas, backend e frontend compilados, PDF sintético assinado e arquivado, `.env` ignorado e template marcado como homologação.
 
-1. Crie um projeto hospedado no Supabase e guarde a senha do banco em um gerenciador.
-2. Em **Connect**, copie o transaction pooler para `DATABASE_URL` e o session pooler, porta
-   5432, para `DIRECT_URL`.
-3. Em **Project Settings > API Keys**, copie a Project URL para `SUPABASE_URL` e a chave
-   `sb_secret_...` para `SUPABASE_SECRET_KEY`.
-4. Não use `anon`, `publishable`, `service_role`, `NEXT_PUBLIC_*` ou `VITE_*` no backend.
-5. Com as quatro variáveis no `.env`, execute:
+## 2. Supabase HML
 
-```powershell
-Set-Location backend
-npm.cmd run prisma:generate
-npm.cmd run prisma:deploy
-npm.cmd run prisma:seed
-```
-
-6. Faça uma prévia pelo aplicativo para criar idempotentemente o bucket privado
-   `responsibility-terms`.
-7. No Dashboard, confirme bucket privado, limite de 20 MB e tipos PDF/DOCX.
-8. Execute Security e Performance Advisors e confirme que tabelas `app_*` não são acessíveis por
-   `anon` ou `authenticated`. A aplicação acessa essas tabelas apenas pelo Prisma.
-
-As mudanças de 2026 sobre exposição automática da Data API não afetam o fluxo do Prisma. Não
-conceda acesso público para contornar erros de conexão.
-
-## 3. Repositório privado e Render
-
-1. Crie um repositório Git privado e envie a branch `main`.
-2. No Render, crie um Blueprint usando `render.yaml`.
-3. Durante a configuração inicial, use o plano `free` da API e o static site gratuito do frontend.
-   Antes dos testes de assinatura e webhooks do Bitrix24, altere a API para `starter`, evitando
-   suspensão após inatividade e atrasos no recebimento de eventos.
-4. Informe no Blueprint as variáveis do Supabase. Para as duas credenciais Bitrix ainda
-   indisponíveis, use temporariamente `PENDING_CONFIGURATION` e substitua depois.
-5. Se algum nome `onrender.com` já estiver ocupado, atualize no Render e também:
-   `PUBLIC_BACKEND_URL`, `FRONTEND_URL` e `VITE_API_URL`.
-6. Confirme `GET /health` com resposta `200` antes de criar o aplicativo Bitrix.
-
-## 4. Aplicativo local Bitrix24
-
-No portal administrativo, crie uma aplicação local do tipo servidor com:
+O Render precisa receber, como segredos e sem aspas adicionais:
 
 ```text
-URL da aplicação:
-https://BACKEND-HML/integrations/bitrix/launch
-
-URL de instalação inicial:
-https://BACKEND-HML/integrations/bitrix/install
-
-Escopos:
-basic, user, crm, sign.b2e
+DATABASE_URL
+DIRECT_URL
+SUPABASE_URL
+SUPABASE_SECRET_KEY
 ```
 
-Copie o código e a chave diretamente para `BITRIX_CLIENT_ID` e `BITRIX_CLIENT_SECRET` no Render.
-Troque `BITRIX_PORTAL_ORIGIN` pelo domínio HTTPS exato do portal e replique esse domínio no
-header `frame-ancestors` do frontend em `render.yaml`. Reimplante os dois serviços e instale o app.
+O entrypoint do backend aplica migrations sem reset e executa o seed idempotente. Depois do deploy, confirme:
 
-Dentro do aplicativo, selecione empresa CRM, provedor, representante, responsável e confirme o
-acesso ao Cofre. Use `12.999` somente na homologação até haver confirmação empresarial.
+- `prisma migrate status` sem pendências;
+- 16 tabelas `app_*` com RLS;
+- bucket privado `responsibility-terms`, 20 MB, PDF/DOCX;
+- nenhum DML de `anon` ou `authenticated`;
+- advisors do Supabase sem alerta crítico relacionado às tabelas da aplicação.
 
-## 5. Teste ponta a ponta
+## 3. Render HML
 
-- Use um usuário Bitrix destinado a teste, CPF sintético e patrimônios fictícios.
-- Abra pelo menu do Bitrix e confirme que acesso direto ou usuário não autorizado falha.
-- Crie, edite e visualize um rascunho com pelo menos dois equipamentos.
-- Confirme a marca `HOMOLOGAÇÃO — SEM VALIDADE` em todas as evidências de teste.
-- Envie, assine com os participantes de teste e acompanhe os eventos.
-- Verifique o PDF final privado no Supabase, seu SHA-256 e a expiração da URL assinada.
-- Reenvie um evento já processado e confirme a deduplicação.
+O Blueprint `render.yaml` mantém:
 
-## 6. Portão de produção
+```text
+Backend:  https://fortatech-termos-api-hml.onrender.com
+Frontend: https://fortatech-termos-web-hml.onrender.com
+Health:   https://fortatech-termos-api-hml.onrender.com/health
+```
 
-Produção exige projetos, aplicativo Bitrix e segredos separados, domínio próprio, documento sem
-marca e aprovado formalmente, política de retenção definida, limpeza dos dados de homologação e
-novo teste controlado. Consulte também `docs/legal-review-checklist.md` e
-`docs/security-operations.md`.
+Segredos obrigatórios do backend:
+
+```text
+DATABASE_URL
+DIRECT_URL
+SUPABASE_URL
+SUPABASE_SECRET_KEY
+BITRIX_CLIENT_ID
+BITRIX_CLIENT_SECRET
+ZAPSIGN_API_TOKEN
+ZAPSIGN_WEBHOOK_SECRET
+```
+
+O Blueprint gera `JWT_SECRET` e `BITRIX_TOKEN_ENCRYPTION_KEY`. Em serviço já criado, uma nova variável marcada como `sync: false` precisa ser preenchida manualmente no painel do Render; o Blueprint não inventa nem copia o segredo.
+
+O plano gratuito é adequado apenas para homologação: o backend suspende após inatividade e pode levar cerca de um minuto para acordar. Antes de produção, altere o serviço para uma instância sempre ativa. Não use um monitor artificial para contornar os limites do plano.
+
+## 4. Aplicativo local Bitrix24 definitivo
+
+No Bitrix24, abra **Aplicativos > Recursos para desenvolvedores > Outros > Aplicativo local** e mantenha o tipo **Servidor**.
+
+```text
+Seu caminho do manipulador:
+https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/launch
+
+Caminho de instalação inicial:
+https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/install
+```
+
+Permissões necessárias para o fluxo atual:
+
+```text
+basic
+user
+department
+im
+```
+
+- `user`/`basic`: identidade e perfil dos colaboradores;
+- `department`: converte `UF_DEPARTMENT` no nome do departamento;
+- `im`: envia notificações pessoais aos usuários selecionados.
+
+`crm` e `sign.b2e` não são usados pelo fluxo final e podem ser retirados. O instalador registra apenas `OnAppInstall` e `OnAppUninstall`.
+
+Procedimento:
+
+1. confira se `BITRIX_CLIENT_ID` e `BITRIX_CLIENT_SECRET` do aplicativo estão no Render;
+2. salve as duas URLs permanentes e as permissões;
+3. clique em **Reinstalar**;
+4. aguarde a página concluir com `BX24.installFinish()`;
+5. clique em **Abrir aplicativo** pelo Bitrix24;
+6. confirme que o Dashboard carrega e que acesso direto à URL não concede sessão.
+
+A instalação precisa ser feita pela sessão administrativa do portal; ela não pode ser automatizada pelo servidor porque é o Bitrix24 que emite e entrega o OAuth inicial.
+
+## 5. ZapSign Sandbox
+
+No Render:
+
+```text
+SIGNATURE_PROVIDER=zapsign
+ZAPSIGN_API_URL=https://sandbox.api.zapsign.com.br/api/v1
+ZAPSIGN_API_TOKEN=<segredo do Sandbox>
+ZAPSIGN_WEBHOOK_SECRET=<segredo aleatório forte>
+```
+
+Na ZapSign Sandbox, configure a URL permanente:
+
+```text
+https://fortatech-termos-api-hml.onrender.com/integrations/zapsign/events
+```
+
+Eventos: `doc_signed` e `doc_refused`.
+
+Header:
+
+```text
+Authorization: Bearer <mesmo ZAPSIGN_WEBHOOK_SECRET>
+```
+
+Depois de salvar, reimplante/reinicie o backend e confirme em **Novo termo** que o provedor aparece configurado e que o ambiente é `sandbox`.
+
+## 6. Teste final autorizado
+
+Destino: `lucas.nicotari@fortatech.com.br`.
+
+1. abra o FortaDocs pelo menu do Bitrix24 com Lucas ou Osmar;
+2. escolha o usuário Bitrix de Lucas e confirme o e-mail acima;
+3. use CPF sintético válido e claramente registre patrimônios como `HML-TESTE`;
+4. inclua ao menos dois equipamentos fictícios;
+5. gere a prévia e confirme a marca **HOMOLOGAÇÃO — SEM VALIDADE**, nome, CPF e itens;
+6. envie uma única vez;
+7. confirme recebimento do e-mail da ZapSign;
+8. abra o link, informe o token e desenhe a assinatura de teste;
+9. confirme o estado concluído no FortaDocs;
+10. valide que notificados receberam aviso no Bitrix24;
+11. confira `ARCHIVED`, tamanho, caminho privado e SHA-256 do PDF final;
+12. confira que reentrega do webhook não cria duplicação.
+
+## 7. Evidências de liberação
+
+- commit e deploy identificados;
+- `/health` em 200;
+- migrations sem pendência;
+- instalação Bitrix ativa no Supabase;
+- provedor ZapSign com token e webhook configurados;
+- ID do termo de teste e horários de envio/assinatura;
+- e-mail entregue, sem registrar o token;
+- PDF final privado e hash correspondente;
+- logs sem CPF, chaves ou conteúdo do documento.
+
+## 8. Produção
+
+Produção exige projeto Supabase separado, serviço Render sempre ativo, aplicativo Bitrix separado, credenciais novas, domínio próprio, template juridicamente aprovado e sem a marca de homologação, retenção/backup definidos e teste controlado adicional.

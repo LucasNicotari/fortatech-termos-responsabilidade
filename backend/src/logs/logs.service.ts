@@ -1,20 +1,80 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class LogsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
-    return this.prisma.integrationLog.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
-  }
+  async activity() {
+    const [auditEvents, requests, signatures, errors] = await Promise.all([
+      this.prisma.auditEvent.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 40,
+        include: { actor: { select: { name: true } } }
+      }),
+      this.prisma.sendRequest.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: 40,
+        include: {
+          requestedBy: { select: { name: true } },
+          employee: { select: { nome: true } }
+        }
+      }),
+      this.prisma.signature.findMany({
+        where: { signedAt: { not: null } },
+        orderBy: { signedAt: 'desc' },
+        take: 30,
+        include: { employee: { select: { nome: true } } }
+      }),
+      this.prisma.integrationLog.findMany({
+        where: { error: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 20
+      })
+    ]);
 
-  async findOne(id: string) {
-    const log = await this.prisma.integrationLog.findUnique({ where: { id } });
-    if (!log) {
-      throw new NotFoundException('Log não encontrado');
-    }
-    return log;
+    const activity = [
+      ...auditEvents.map((event) => ({
+        id: `audit:${event.id}`,
+        actor: event.actor?.name || 'Sistema',
+        action: this.auditAction(event.action, event.entityType),
+        context: this.auditContext(event.metadata),
+        status: 'SUCCESS' as const,
+        createdAt: event.createdAt
+      })),
+      ...requests.map((request) => ({
+        id: `request:${request.id}`,
+        actor: request.requestedBy?.name || 'Sistema',
+        action: request.failureReason
+          ? `encontrou uma falha no termo de ${request.employee.nome}`
+          : request.sentAt
+            ? `enviou um termo para ${request.employee.nome}`
+            : `criou um rascunho para ${request.employee.nome}`,
+        context: request.failureReason || request.documentFileName || undefined,
+        status: request.failureReason ? 'ERROR' as const : 'SUCCESS' as const,
+        createdAt: request.sentAt || request.requestedAt
+      })),
+      ...signatures.map((signature) => ({
+        id: `signature:${signature.id}`,
+        actor: signature.employee.nome,
+        action: 'assinou o termo de responsabilidade',
+        context: 'Assinatura do colaborador concluída',
+        status: 'SUCCESS' as const,
+        createdAt: signature.signedAt!
+      })),
+      ...errors.map((log) => ({
+        id: `error:${log.id}`,
+        actor: 'Sistema',
+        action: `registrou uma falha em ${log.source}`,
+        context: log.error || log.endpoint || undefined,
+        status: 'ERROR' as const,
+        createdAt: log.createdAt
+      }))
+    ];
+
+    return activity
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, 60);
   }
 
   create(data: {
@@ -59,5 +119,23 @@ export class LogsService {
       return undefined;
     }
     return JSON.parse(JSON.stringify(value));
+  }
+
+  private auditAction(action: string, entityType: string) {
+    const actions: Record<string, string> = {
+      REPLACE_ASSIGNMENTS: 'atualizou operadores e notificações',
+      UPLOAD: 'adicionou uma nova versão de template',
+      SET_DEFAULT: 'definiu o template padrão',
+      ACTIVATE: 'ativou uma versão de template',
+      DEACTIVATE: 'desativou uma versão de template'
+    };
+    return actions[action] || `alterou ${entityType.toLocaleLowerCase('pt-BR').replace(/_/g, ' ')}`;
+  }
+
+  private auditContext(metadata: unknown) {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return undefined;
+    const values = metadata as Record<string, unknown>;
+    const candidate = values.name || values.version || values.fileName;
+    return typeof candidate === 'string' ? candidate : undefined;
   }
 }

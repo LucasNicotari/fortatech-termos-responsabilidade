@@ -14,6 +14,11 @@ export class AuthController {
     return this.auth.exchangeBitrixCode(code);
   }
 
+  @Post('local')
+  local() {
+    return this.auth.localLogin();
+  }
+
   @Get('me')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)

@@ -5,14 +5,16 @@ import {
   SendAttemptStatus,
   SendRequestStatus,
   SendTriggerType,
+  SignatureProvider,
   SignatureStatus
 } from '@prisma/client';
 import { BitrixService } from '../bitrix/bitrix.service';
 import { DocumentsService } from '../documents/documents.service';
-import { BitrixSigningConfig } from '../integrations/bitrix-integrations.service';
 import { LogsService } from '../logs/logs.service';
+import { TermNotificationsService } from '../notifications/term-notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { ZapSignService } from '../signature-providers/zapsign.service';
 import { CreateSendRequestDto, UpdateSendRequestDto } from './dto/create-send-request.dto';
 
 @Injectable()
@@ -22,7 +24,9 @@ export class SendRequestsService {
     private readonly bitrix: BitrixService,
     private readonly documents: DocumentsService,
     private readonly storage: StorageService,
-    private readonly logs: LogsService
+    private readonly logs: LogsService,
+    private readonly zapSign: ZapSignService,
+    private readonly notifications: TermNotificationsService
   ) {}
 
   findAll() {
@@ -39,26 +43,41 @@ export class SendRequestsService {
   }
 
   async createDraft(dto: CreateSendRequestDto, requestedByUserId?: string) {
-    const bitrixUser = await this.bitrix.getUser(dto.employeeBitrixUserId);
-    if (bitrixUser.EMAIL && bitrixUser.EMAIL.toLowerCase() !== dto.employeeEmail.toLowerCase()) {
-      throw new BadRequestException('O email informado nao corresponde ao usuario selecionado no Bitrix24');
+    await this.bitrix.getUser(dto.employeeBitrixUserId);
+    const bitrixId = String(dto.employeeBitrixUserId);
+    const email = dto.employeeEmail.trim().toLowerCase();
+    const cpf = dto.cpf.trim();
+    const [byBitrixId, byEmail, byCpf] = await Promise.all([
+      this.prisma.employee.findUnique({ where: { bitrixId } }),
+      this.prisma.employee.findUnique({ where: { email } }),
+      this.prisma.employee.findUnique({ where: { cpf } })
+    ]);
+    if (byEmail && byBitrixId && byEmail.id !== byBitrixId.id) {
+      throw new BadRequestException('O email informado ja pertence a outro colaborador');
     }
-    const employee = await this.prisma.employee.upsert({
-      where: { email: dto.employeeEmail.toLowerCase() },
-      update: {
-        bitrixId: String(dto.employeeBitrixUserId), nome: dto.employeeName, cpf: dto.cpf,
-        cargo: dto.cargo, departamento: dto.departamento
-      },
-      create: {
-        bitrixId: String(dto.employeeBitrixUserId), nome: dto.employeeName,
-        email: dto.employeeEmail.toLowerCase(), cpf: dto.cpf,
-        cargo: dto.cargo, departamento: dto.departamento
-      }
-    });
+    if (byEmail?.bitrixId && byEmail.bitrixId !== bitrixId) {
+      throw new BadRequestException('O email informado ja pertence a outro colaborador');
+    }
+    if ((byCpf && byBitrixId && byCpf.id !== byBitrixId.id)
+      || (byCpf && byEmail && byCpf.id !== byEmail.id)
+      || (byCpf?.bitrixId && byCpf.bitrixId !== bitrixId)) {
+      throw new BadRequestException('O CPF informado ja pertence a outro colaborador');
+    }
+    const existing = byBitrixId || byEmail || byCpf;
+    const employeeData = {
+      bitrixId,
+      nome: dto.employeeName.trim(),
+      email,
+      cpf,
+      cargo: dto.cargo?.trim() || null,
+      departamento: dto.departamento.trim()
+    };
+    const employee = existing
+      ? await this.prisma.employee.update({ where: { id: existing.id }, data: employeeData })
+      : await this.prisma.employee.create({ data: employeeData });
     const templateVersion = dto.templateVersionId
       ? await this.findTemplateVersion(dto.templateVersionId)
       : await this.findDefaultTemplateVersion();
-    const signingConfig = await this.getSigningConfig();
     const request = await this.prisma.sendRequest.create({
       data: {
         employeeId: employee.id,
@@ -68,8 +87,6 @@ export class SendRequestsService {
         requestedByUserId,
         employeeSnapshot: this.toJson(this.employeeSnapshot(dto)),
         documentData: this.toJson({ city: dto.city || 'Sao Paulo' }),
-        companySignerBitrixId: String(signingConfig.companySignerUserId),
-        responsibleBitrixId: String(signingConfig.responsibleUserId),
         equipment: {
           create: dto.equipment.map((item, index) => ({
             itemNumber: index + 1,
@@ -94,10 +111,25 @@ export class SendRequestsService {
     if (String(dto.employeeBitrixUserId) !== request.employee.bitrixId) {
       throw new BadRequestException('Nao e permitido trocar o colaborador de um rascunho; crie outro');
     }
+    const email = dto.employeeEmail.trim().toLowerCase();
+    const cpf = dto.cpf.trim();
+    const [byEmail, byCpf] = await Promise.all([
+      this.prisma.employee.findUnique({ where: { email } }),
+      this.prisma.employee.findUnique({ where: { cpf } })
+    ]);
+    if (byEmail && byEmail.id !== request.employeeId) {
+      throw new BadRequestException('O email informado ja pertence a outro colaborador');
+    }
+    if (byCpf && byCpf.id !== request.employeeId) {
+      throw new BadRequestException('O CPF informado ja pertence a outro colaborador');
+    }
     await this.prisma.$transaction([
       this.prisma.employee.update({
         where: { id: request.employeeId },
-        data: { nome: dto.employeeName, email: dto.employeeEmail.toLowerCase(), cpf: dto.cpf, cargo: dto.cargo, departamento: dto.departamento }
+        data: {
+          nome: dto.employeeName.trim(), email, cpf,
+          cargo: dto.cargo?.trim() || null, departamento: dto.departamento.trim()
+        }
       }),
       this.prisma.sendRequestEquipment.deleteMany({ where: { sendRequestId: id } }),
       this.prisma.sendRequest.update({
@@ -153,7 +185,6 @@ export class SendRequestsService {
     if (request.status !== SendRequestStatus.READY || !request.unsignedStoragePath || !request.documentFileName) {
       throw new BadRequestException('Gere e revise a previa antes do envio');
     }
-    const config = await this.getSigningConfig();
     const attempt = await this.prisma.$transaction(async (transaction) => {
       const claimed = await transaction.sendRequest.updateMany({
         where: { id, status: SendRequestStatus.READY, lockedAt: null },
@@ -169,48 +200,53 @@ export class SendRequestsService {
     });
     try {
       const pdf = await this.storage.download(request.unsignedStoragePath);
-      const result = await this.bitrix.sendHrSignature({
+      const snapshot = request.employeeSnapshot as Record<string, unknown>;
+      const observers = await this.notifications.recipientEmails();
+      const result = await this.zapSign.createDocument({
         externalId: id,
         fileName: request.documentFileName,
         pdf,
-        companyCrmId: config.companyCrmId,
-        employeeUserId: Number(request.employee.bitrixId),
-        companySignerUserId: config.companySignerUserId,
-        responsibleUserId: config.responsibleUserId,
-        companyProviderUid: config.companyProviderUid,
-        regionDocumentType: config.regionDocumentType || '12.999'
+        signer: {
+          externalId: request.employee.bitrixId || request.employeeId,
+          name: String(snapshot.name || request.employee.nome),
+          email: String(snapshot.email || request.employee.email),
+          cpf: String(snapshot.cpf || request.employee.cpf || '')
+        },
+        observers
       });
-      const signer = result.members.find((member) => member.role === 'signer');
-      const assignee = result.members.find((member) => member.role === 'assignee');
       const signature = await this.prisma.signature.create({
         data: {
           sendRequestId: id,
           employeeId: request.employeeId,
           templateVersionId: request.templateVersionId,
-          bitrixDocumentId: result.uid,
-          bitrixDocumentUid: result.uid,
-          signerMemberUid: signer?.uid,
-          assigneeMemberUid: assignee?.uid,
+          provider: SignatureProvider.ZAPSIGN,
+          providerDocumentId: result.token,
           status: SignatureStatus.SENT,
-          rawStatusCode: result.state.code,
-          bitrixStage: result.state.name,
+          rawStatusCode: result.status,
+          bitrixStage: 'Aguardando assinatura do colaborador',
           sentAt: new Date(),
           lastSyncedAt: new Date(),
           archiveStatus: ArchiveStatus.NOT_REQUIRED
         }
       });
       await this.prisma.signatureEvent.create({
-        data: { signatureId: signature.id, eventType: 'SIGN_B2E_SENT', status: SignatureStatus.SENT, bitrixStage: result.state.code }
+        data: { signatureId: signature.id, eventType: 'ZAPSIGN_SENT', status: SignatureStatus.SENT, bitrixStage: result.status }
       });
       await this.prisma.sendAttempt.update({
         where: { id: attempt.id },
-        data: { status: SendAttemptStatus.SUCCESS, finishedAt: new Date(), bitrixResponse: this.toJson(result) }
+        data: {
+          status: SendAttemptStatus.SUCCESS,
+          finishedAt: new Date(),
+          providerResponse: this.toJson({ provider: 'ZAPSIGN', documentToken: result.token, status: result.status })
+        }
       });
-      return this.prisma.sendRequest.update({
+      const updatedRequest = await this.prisma.sendRequest.update({
         where: { id },
         data: { status: SendRequestStatus.SENT, sentAt: new Date(), lockedAt: new Date() },
         include: { employee: true, equipment: true, signatures: true }
       });
+      await this.notifications.notifySent(signature.id, id, request.employee.nome);
+      return updatedRequest;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro desconhecido no envio';
       await this.prisma.sendAttempt.update({
@@ -267,24 +303,14 @@ export class SendRequestsService {
     return result;
   }
 
-  private async getSigningConfig() {
-    const setting = await this.prisma.setting.findUnique({ where: { key: 'bitrix.signing' } });
-    if (!setting) throw new BadRequestException('Configure empresa, provedor e representantes do Bitrix24');
-    const value = setting.value as unknown as BitrixSigningConfig;
-    if (!value.safeAccessConfirmed) {
-      throw new BadRequestException('Confirme a permissao de acesso ao cofre da empresa no Bitrix24');
-    }
-    return value;
-  }
-
   private employeeSnapshot(dto: CreateSendRequestDto) {
     return {
       bitrixUserId: dto.employeeBitrixUserId,
-      name: dto.employeeName,
-      email: dto.employeeEmail.toLowerCase(),
-      cpf: dto.cpf,
-      cargo: dto.cargo,
-      departamento: dto.departamento
+      name: dto.employeeName.trim(),
+      email: dto.employeeEmail.trim().toLowerCase(),
+      cpf: dto.cpf.trim(),
+      cargo: dto.cargo?.trim() || null,
+      departamento: dto.departamento.trim()
     };
   }
 

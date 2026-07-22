@@ -15,7 +15,7 @@ export class CreateSendRequestDto {
   @IsString() @IsNotEmpty() employeeName!: string;
   @IsString() @IsNotEmpty() cpf!: string;
   @IsOptional() @IsString() cargo?: string;
-  @IsOptional() @IsString() departamento?: string;
+  @IsString() @IsNotEmpty() departamento!: string;
   @IsOptional() @IsString() city?: string;
   @IsOptional() @IsString() templateVersionId?: string;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => EquipmentDto)
