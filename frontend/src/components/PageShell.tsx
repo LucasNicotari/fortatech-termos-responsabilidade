@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { FortaTechMark } from './FortaTechMark';
 import { UserAvatar } from './UserAvatar';
+import { BitrixFrameSync } from './BitrixFrameSync';
 
 const primaryItems = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
@@ -54,6 +55,7 @@ export function PageShell() {
 
   return (
     <div className="min-h-screen bg-b24-bg">
+      <BitrixFrameSync />
       <header className="sticky top-0 z-30 border-t-[3px] border-t-b24-blue bg-white shadow-[0_2px_10px_rgba(82,92,105,0.08)]">
         <div className="mx-auto max-w-[1600px] px-3 sm:px-5 lg:px-7">
           <div className="flex min-h-[66px] items-center gap-3 lg:gap-6">

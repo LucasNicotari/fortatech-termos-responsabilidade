@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ExternalLink, Eye, Pencil, Plus, Send, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ExternalLink, Eye, Pencil, Plus, Send, Trash2, UserRound, Package } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { BitrixEmployee, Equipment, SendRequest } from '../types';
@@ -15,10 +15,13 @@ interface ProviderStatus {
   local?: boolean;
 }
 
+type Step = 1 | 2 | 3;
+
 const emptyEquipment = (): Equipment => ({ quantity: 1, description: '', serialNumber: '', assetTag: '', accessories: '' });
 
 export function SendRequests() {
   const queryClient = useQueryClient();
+  const [step, setStep] = useState<Step>(1);
   const [employeeId, setEmployeeId] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -43,22 +46,23 @@ export function SendRequests() {
     retry: false
   });
 
-  const create = useMutation({
-    mutationFn: () => api.post<SendRequest>('/send-requests', {
-      employeeBitrixUserId: Number(employeeId), employeeName: name, employeeEmail: email,
-      cpf, cargo: jobTitle, departamento: department, equipment
-    }),
-    onSuccess: ({ data }) => {
-      setDraftId(data.id);
-      setPreviewUrl(null);
+  const prepare = useMutation({
+    mutationFn: async () => {
+      let requestId = draftId;
+      if (!requestId) {
+        const { data: request } = await api.post<SendRequest>('/send-requests', {
+          employeeBitrixUserId: Number(employeeId), employeeName: name, employeeEmail: email,
+          cpf, cargo: jobTitle, departamento: department, equipment
+        });
+        requestId = request.id;
+      }
+      const { data: preview } = await api.post<{ previewUrl: string }>(`/send-requests/${requestId}/preview`);
+      return { requestId, previewUrl: preview.previewUrl };
+    },
+    onSuccess: ({ requestId, previewUrl: url }) => {
+      setDraftId(requestId);
+      setPreviewUrl(url);
       setSentMessage('');
-      queryClient.invalidateQueries({ queryKey: ['send-requests'] });
-    }
-  });
-  const preview = useMutation({
-    mutationFn: (id: string) => api.post<{ previewUrl: string }>(`/send-requests/${id}/preview`),
-    onSuccess: ({ data }) => {
-      setPreviewUrl(data.previewUrl);
       queryClient.invalidateQueries({ queryKey: ['send-requests'] });
     }
   });
@@ -77,12 +81,14 @@ export function SendRequests() {
       setEditingEmail(false);
       setCpf('');
       setEquipment([emptyEquipment()]);
+      setStep(1);
       setSentMessage(providerQuery.data?.local
-        ? 'Envio local simulado. Nenhum e-mail foi enviado; abra abaixo a tela que o colaborador receberia.'
+        ? 'Envio local simulado. Nenhum e-mail foi enviado; abra a experiência do colaborador abaixo.'
         : 'Termo enviado. O colaborador receberá o link de assinatura por e-mail.');
       setLocalSigningUrl(providerQuery.data?.local && localToken ? `/assinar/${encodeURIComponent(localToken)}` : '');
       queryClient.invalidateQueries({ queryKey: ['send-requests'] });
       queryClient.invalidateQueries({ queryKey: ['signatures'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     }
   });
 
@@ -111,129 +117,144 @@ export function SendRequests() {
   }
 
   const providerReady = providerQuery.data?.configured && providerQuery.data?.webhookConfigured;
-  const error = create.error || preview.error || send.error;
+  const error = prepare.error || send.error;
   const cpfComplete = cpf.replace(/\D/g, '').length === 11;
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const employeeComplete = Boolean(employeeId && name.trim() && emailValid && cpfComplete && department.trim());
   const equipmentComplete = equipment.every((item) => item.quantity >= 1 && item.description.trim());
-  const requiredFieldsComplete = Boolean(employeeId && name.trim() && emailValid && cpfComplete && department.trim() && equipmentComplete);
 
   return (
-    <section>
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-2xl font-bold text-ink">Novo termo</h1><p className="mt-1 text-sm text-steel">Selecione o colaborador, informe o CPF e os equipamentos, revise o PDF e envie.</p></div>
-        <Link to="/terms" className="focus-ring rounded border border-b24-border bg-white px-3 py-2 text-sm font-medium text-steel hover:bg-sky-50 hover:text-b24-blue-dark">Ver todos os termos</Link>
+    <section className="mx-auto max-w-[1280px]">
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div><h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">Novo termo</h1><p className="mt-0.5 text-sm text-steel">Preencha em três etapas rápidas.</p></div>
+        <Link to="/terms" className="focus-ring text-sm font-semibold text-b24-blue-dark hover:underline">Ver todos os termos</Link>
       </header>
 
-      {!providerReady && (
-        <div className="mb-5 rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          <strong>Envio em modo de preparação.</strong>{' '}
-          Configure o token e o segredo de webhook da ZapSign Sandbox para liberar o botão de envio. A prévia do PDF já pode ser testada normalmente.
-        </div>
-      )}
-      {providerQuery.data?.local && (
-        <div className="mb-5 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Modo local: envio e assinatura são simulados; nenhum e-mail real será enviado.
-        </div>
-      )}
-      {providerQuery.data?.environment === 'sandbox' && providerReady && !providerQuery.data.local && (
-        <div className="mb-5 rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-          Ambiente de homologação ativo: os documentos de teste não possuem validade jurídica.
-        </div>
-      )}
+      <ProviderNotice provider={providerQuery.data} ready={Boolean(providerReady)} />
+      {sentMessage && <SuccessMessage message={sentMessage} localSigningUrl={localSigningUrl} />}
 
-      <div className="mb-8 rounded border border-zinc-200 bg-white p-4 sm:p-5">
-        <p className="mb-4 text-xs text-zinc-500"><span className="font-bold text-coral">*</span> Campos obrigatórios para gerar e enviar o termo.</p>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-1 text-sm text-steel">
-            <span>Colaborador <strong className="text-coral">*</strong></span>
-            <span className="flex min-w-0 gap-2">
-              {editingName ? (
-                <input autoFocus className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink" value={name} onChange={(event) => { setName(event.target.value); resetDocumentState(); }} />
-              ) : (
-                <select className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink" value={employeeId} onChange={(event) => selectEmployee(event.target.value)}>
-                  <option value="">Selecione</option>
-                  {employees.map((employee) => <option key={employee.ID} value={employee.ID}>{[employee.NAME, employee.LAST_NAME].filter(Boolean).join(' ')}</option>)}
-                </select>
-              )}
-              <EditButton editing={editingName} disabled={!employeeId} label="nome" onClick={() => setEditingName((value) => !value)} />
-            </span>
-            <span className="text-xs text-zinc-500">Nome completo do perfil Bitrix24; use o lápis somente para corrigir.</span>
-          </label>
-          <Field label="CPF" required value={cpf} onChange={(value) => { setCpf(formatCpf(value)); resetDocumentState(); }} inputMode="numeric" placeholder="000.000.000-00" maxLength={14} />
-          <label className="grid gap-1 text-sm text-steel">
-            <span>E-mail <strong className="text-coral">*</strong></span>
-            <span className="flex min-w-0 gap-2">
-              <input type="email" readOnly={!editingEmail} className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink read-only:bg-zinc-100" value={email} onChange={(event) => { setEmail(event.target.value); resetDocumentState(); }} />
-              <EditButton editing={editingEmail} disabled={!employeeId} label="e-mail" onClick={() => setEditingEmail((value) => !value)} />
-            </span>
-            <span className="text-xs text-zinc-500">O link de assinatura será enviado para este endereço.</span>
-          </label>
-          <Field label="Departamento" required value={department} readOnly hint={department ? 'Preenchido pelo perfil do Bitrix24' : employeeId ? 'Departamento não localizado no perfil ou sem permissão de leitura.' : 'Preenchido pelo perfil do Bitrix24'} />
+      <div className="overflow-hidden rounded-xl border border-b24-border bg-white shadow-sm">
+        <div className="grid grid-cols-3 border-b border-b24-border bg-b24-bg/45">
+          <StepButton number={1} label="Colaborador" current={step} available onClick={() => setStep(1)} />
+          <StepButton number={2} label="Equipamentos" current={step} available={employeeComplete} onClick={() => setStep(2)} />
+          <StepButton number={3} label="Revisar e enviar" current={step} available={employeeComplete && equipmentComplete} onClick={() => setStep(3)} />
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold text-ink">Equipamentos e acessórios</h2>
-          <button type="button" onClick={() => { setEquipment((items) => [...items, emptyEquipment()]); resetDocumentState(); }} className="focus-ring inline-flex items-center gap-2 rounded border border-zinc-300 px-3 py-2 text-sm text-steel">
-            <Plus size={16} /> Adicionar item
-          </button>
-        </div>
-        <div className="mt-3 grid gap-3">
-          {equipment.map((item, index) => (
-            <div key={index} className="grid gap-2 rounded bg-zinc-50 p-3 sm:grid-cols-2 xl:grid-cols-[80px_1.5fr_1fr_1fr_1fr_auto]">
-              <input required aria-label="Quantidade obrigatória" title="Quantidade obrigatória" type="number" min={1} className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.quantity} onChange={(event) => updateEquipment(index, 'quantity', Number(event.target.value))} />
-              <input required aria-label="Modelo ou descrição obrigatória" placeholder="Modelo ou descrição *" className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.description} onChange={(event) => updateEquipment(index, 'description', event.target.value)} />
-              <input aria-label="Número de série" placeholder="Número de série" className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.serialNumber} onChange={(event) => updateEquipment(index, 'serialNumber', event.target.value)} />
-              <input aria-label="Patrimônio" placeholder="Patrimônio" className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.assetTag} onChange={(event) => updateEquipment(index, 'assetTag', event.target.value)} />
-              <input aria-label="Acessórios" placeholder="Acessórios" className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.accessories} onChange={(event) => updateEquipment(index, 'accessories', event.target.value)} />
-              <button disabled={equipment.length === 1} onClick={() => { setEquipment((items) => items.filter((_, itemIndex) => itemIndex !== index)); resetDocumentState(); }} className="rounded p-2 text-coral disabled:opacity-30" title="Remover"><Trash2 size={18} /></button>
+        <div className="p-4 sm:p-5">
+          {step === 1 && (
+            <div>
+              <SectionTitle icon={UserRound} title="Dados do colaborador" description="Nome, e-mail e departamento vêm do perfil do Bitrix24." />
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-1 text-sm text-steel">
+                  <span>Colaborador <strong className="text-coral">*</strong></span>
+                  <span className="flex min-w-0 gap-2">
+                    {editingName ? (
+                      <input autoFocus className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink" value={name} onChange={(event) => { setName(event.target.value); resetDocumentState(); }} />
+                    ) : (
+                      <select className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink" value={employeeId} onChange={(event) => selectEmployee(event.target.value)}>
+                        <option value="">Selecione</option>
+                        {employees.map((employee) => <option key={employee.ID} value={employee.ID}>{[employee.NAME, employee.LAST_NAME].filter(Boolean).join(' ')}</option>)}
+                      </select>
+                    )}
+                    <EditButton editing={editingName} disabled={!employeeId} label="nome" onClick={() => setEditingName((value) => !value)} />
+                  </span>
+                </label>
+                <Field label="CPF" required value={cpf} onChange={(value) => { setCpf(formatCpf(value)); resetDocumentState(); }} inputMode="numeric" placeholder="000.000.000-00" maxLength={14} />
+                <label className="grid gap-1 text-sm text-steel">
+                  <span>E-mail <strong className="text-coral">*</strong></span>
+                  <span className="flex min-w-0 gap-2">
+                    <input type="email" readOnly={!editingEmail} className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink read-only:bg-zinc-100" value={email} onChange={(event) => { setEmail(event.target.value); resetDocumentState(); }} />
+                    <EditButton editing={editingEmail} disabled={!employeeId} label="e-mail" onClick={() => setEditingEmail((value) => !value)} />
+                  </span>
+                </label>
+                <Field label="Departamento" required value={department} readOnly hint={employeeId && !department ? 'Departamento não localizado no perfil.' : undefined} />
+              </div>
+              <StepFooter><span /><NextButton disabled={!employeeComplete} onClick={() => setStep(2)}>Continuar</NextButton></StepFooter>
             </div>
-          ))}
-        </div>
+          )}
 
-        {error && <p role="alert" className="mt-4 text-sm text-coral">{apiError(error)}</p>}
-        {sentMessage && (
-          <div role="status" className="mt-4 flex flex-wrap items-center gap-3 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-            <span className="flex-1">{sentMessage}</span>
-            {localSigningUrl && (
-              <a href={localSigningUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded bg-b24-blue px-3 py-2 font-semibold text-white hover:bg-b24-blue-dark">
-                <ExternalLink size={16} /> Abrir como colaborador
-              </a>
-            )}
-          </div>
-        )}
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap">
-          <button disabled={!requiredFieldsComplete || create.isPending} onClick={() => create.mutate()} className="focus-ring rounded bg-mint px-4 py-2 font-semibold text-white disabled:opacity-50">
-            {create.isPending ? 'Salvando...' : '1. Salvar rascunho'}
-          </button>
-          <button disabled={!draftId || preview.isPending} onClick={() => draftId && preview.mutate(draftId)} className="focus-ring inline-flex items-center justify-center gap-2 rounded border border-zinc-300 px-4 py-2 text-steel disabled:opacity-50">
-            <Eye size={17} /> {preview.isPending ? 'Gerando...' : '2. Gerar prévia'}
-          </button>
-          {previewUrl && <a href={previewUrl} target="_blank" rel="noreferrer" className="focus-ring rounded border border-mint px-4 py-2 text-center text-mint">3. Abrir e revisar PDF</a>}
-          <button disabled={!draftId || !previewUrl || !providerReady || send.isPending} onClick={() => draftId && send.mutate(draftId)} className="focus-ring inline-flex items-center justify-center gap-2 rounded bg-ink px-4 py-2 font-semibold text-white disabled:opacity-50" title={!providerReady ? 'Configure a ZapSign Sandbox para liberar o envio' : undefined}>
-            <Send size={17} /> {send.isPending
-              ? 'Enviando...'
-              : providerQuery.data?.local ? '4. Simular envio' : '4. Enviar ao colaborador'}
-          </button>
+          {step === 2 && (
+            <div>
+              <SectionTitle icon={Package} title="Equipamentos" description="Informe ao menos a quantidade e a descrição de cada item." />
+              <div className="grid gap-2.5">
+                {equipment.map((item, index) => (
+                  <div key={index} className="grid gap-2 rounded-lg border border-b24-border bg-b24-bg/35 p-3 sm:grid-cols-2 xl:grid-cols-[70px_1.5fr_1fr_1fr_1fr_38px]">
+                    <input required aria-label="Quantidade obrigatória" title="Quantidade" type="number" min={1} className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.quantity} onChange={(event) => updateEquipment(index, 'quantity', Number(event.target.value))} />
+                    <input required aria-label="Descrição obrigatória" placeholder="Modelo ou descrição *" className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.description} onChange={(event) => updateEquipment(index, 'description', event.target.value)} />
+                    <input aria-label="Número de série" placeholder="Número de série" className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.serialNumber} onChange={(event) => updateEquipment(index, 'serialNumber', event.target.value)} />
+                    <input aria-label="Patrimônio" placeholder="Patrimônio" className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.assetTag} onChange={(event) => updateEquipment(index, 'assetTag', event.target.value)} />
+                    <input aria-label="Acessórios" placeholder="Acessórios" className="min-w-0 rounded border border-zinc-300 px-2 py-2" value={item.accessories} onChange={(event) => updateEquipment(index, 'accessories', event.target.value)} />
+                    <button type="button" disabled={equipment.length === 1} onClick={() => { setEquipment((items) => items.filter((_, itemIndex) => itemIndex !== index)); resetDocumentState(); }} className="focus-ring grid min-h-9 place-items-center rounded text-coral hover:bg-red-50 disabled:opacity-30" title="Remover"><Trash2 size={17} /></button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={() => { setEquipment((items) => [...items, emptyEquipment()]); resetDocumentState(); }} className="focus-ring mt-3 inline-flex items-center gap-2 rounded-lg border border-b24-border px-3 py-2 text-sm font-medium text-steel hover:bg-sky-50 hover:text-b24-blue-dark"><Plus size={16} /> Adicionar equipamento</button>
+              <StepFooter><BackButton onClick={() => setStep(1)} /><NextButton disabled={!equipmentComplete} onClick={() => setStep(3)}>Revisar</NextButton></StepFooter>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <SectionTitle icon={Eye} title="Revisão e envio" description="Confira o resumo, gere a prévia e envie ao colaborador." />
+              <div className="grid gap-3 md:grid-cols-2">
+                <SummaryCard title="Colaborador" lines={[name, cpf, email, department]} onEdit={() => setStep(1)} />
+                <SummaryCard title={`Equipamentos (${equipment.length})`} lines={equipment.map((item) => `${item.quantity}× ${item.description}${item.assetTag ? ` · Patrimônio ${item.assetTag}` : ''}`)} onEdit={() => setStep(2)} />
+              </div>
+
+              {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-coral">{apiError(error)}</p>}
+              <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-b24-border pt-4">
+                <BackButton onClick={() => setStep(2)} />
+                <button disabled={prepare.isPending} onClick={() => prepare.mutate()} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-b24-blue px-4 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50 disabled:opacity-50"><Eye size={16} /> {prepare.isPending ? 'Preparando...' : previewUrl ? 'Atualizar prévia' : 'Gerar prévia'}</button>
+                {previewUrl && <a href={previewUrl} target="_blank" rel="noreferrer" className="focus-ring rounded-lg border border-mint px-4 py-2 text-sm font-semibold text-mint hover:bg-emerald-50">Abrir PDF</a>}
+                <button disabled={!draftId || !previewUrl || !providerReady || send.isPending} onClick={() => draftId && send.mutate(draftId)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50" title={!providerReady ? 'Configure a ZapSign Sandbox para liberar o envio' : undefined}><Send size={16} /> {send.isPending ? 'Enviando...' : providerQuery.data?.local ? 'Simular envio' : 'Enviar ao colaborador'}</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
     </section>
   );
 }
 
-function Field({ label, value, onChange, type = 'text', readOnly = false, required = false, hint, inputMode, placeholder, maxLength }: {
-  label: string;
-  value: string;
-  onChange?: (value: string) => void;
-  type?: string;
-  readOnly?: boolean;
-  required?: boolean;
-  hint?: string;
-  inputMode?: 'numeric';
-  placeholder?: string;
-  maxLength?: number;
-}) {
-  return <label className="grid gap-1 text-sm text-steel"><span>{label} {required && <strong className="text-coral">*</strong>}</span><input required={required} type={type} inputMode={inputMode} placeholder={placeholder} readOnly={readOnly} maxLength={maxLength} className="focus-ring min-w-0 rounded border border-zinc-300 px-3 py-2 text-ink read-only:bg-zinc-100" value={value} onChange={(event) => onChange?.(event.target.value)} />{hint && <span className="text-xs text-zinc-500">{hint}</span>}</label>;
+function ProviderNotice({ provider, ready }: { provider?: ProviderStatus; ready: boolean }) {
+  if (provider?.local) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Modo local: envio e assinatura simulados; nenhum e-mail real será enviado.</div>;
+  if (provider?.environment === 'sandbox' && ready) return <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">Homologação ativa: documentos de teste sem validade jurídica.</div>;
+  if (!ready) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><strong>Envio em preparação.</strong> Configure a ZapSign Sandbox; a prévia do PDF continua disponível.</div>;
+  return null;
+}
+
+function StepButton({ number, label, current, available, onClick }: { number: Step; label: string; current: Step; available: boolean; onClick: () => void }) {
+  const active = number === current;
+  const complete = number < current;
+  return <button type="button" disabled={!available} onClick={onClick} aria-current={active ? 'step' : undefined} className={`focus-ring flex min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-3 text-xs font-semibold transition sm:text-sm ${active ? 'border-b24-blue bg-white text-b24-blue-dark' : 'border-transparent text-steel hover:bg-white/70'} disabled:cursor-not-allowed disabled:opacity-45`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${active || complete ? 'bg-b24-blue text-white' : 'bg-zinc-200 text-steel'}`}>{complete ? <Check size={12} /> : number}</span><span className="truncate">{label}</span></button>;
+}
+
+function SectionTitle({ icon: Icon, title, description }: { icon: typeof UserRound; title: string; description: string }) {
+  return <div className="mb-4 flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-50 text-b24-blue-dark"><Icon size={17} /></span><div><h2 className="font-semibold text-ink">{title}</h2><p className="mt-0.5 text-xs text-steel">{description}</p></div></div>;
+}
+
+function StepFooter({ children }: { children: React.ReactNode }) {
+  return <div className="mt-5 flex items-center justify-between border-t border-b24-border pt-4">{children}</div>;
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return <button type="button" onClick={onClick} className="focus-ring inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-steel hover:bg-b24-bg"><ChevronLeft size={16} /> Voltar</button>;
+}
+
+function NextButton({ children, disabled, onClick }: { children: React.ReactNode; disabled: boolean; onClick: () => void }) {
+  return <button type="button" disabled={disabled} onClick={onClick} className="focus-ring inline-flex items-center gap-1 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-45">{children} <ChevronRight size={16} /></button>;
+}
+
+function SummaryCard({ title, lines, onEdit }: { title: string; lines: string[]; onEdit: () => void }) {
+  return <article className="rounded-lg border border-b24-border bg-b24-bg/35 p-3.5"><div className="mb-2 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-ink">{title}</h3><button type="button" onClick={onEdit} className="focus-ring rounded p-1 text-b24-blue-dark hover:bg-sky-100" title="Editar"><Pencil size={15} /></button></div><div className="space-y-1">{lines.map((line, index) => <p key={`${line}-${index}`} className="truncate text-xs text-steel" title={line}>{line || '-'}</p>)}</div></article>;
+}
+
+function SuccessMessage({ message, localSigningUrl }: { message: string; localSigningUrl: string }) {
+  return <div role="status" className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><span className="flex-1">{message}</span>{localSigningUrl && <a href={localSigningUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded bg-b24-blue px-3 py-2 font-semibold text-white"><ExternalLink size={16} /> Abrir como colaborador</a>}</div>;
+}
+
+function Field({ label, value, onChange, type = 'text', readOnly = false, required = false, hint, inputMode, placeholder, maxLength }: { label: string; value: string; onChange?: (value: string) => void; type?: string; readOnly?: boolean; required?: boolean; hint?: string; inputMode?: 'numeric'; placeholder?: string; maxLength?: number }) {
+  return <label className="grid gap-1 text-sm text-steel"><span>{label} {required && <strong className="text-coral">*</strong>}</span><input required={required} type={type} inputMode={inputMode} placeholder={placeholder} readOnly={readOnly} maxLength={maxLength} className="focus-ring min-w-0 rounded border border-zinc-300 px-3 py-2 text-ink read-only:bg-zinc-100" value={value} onChange={(event) => onChange?.(event.target.value)} />{hint && <span className="text-xs text-coral">{hint}</span>}</label>;
 }
 
 function EditButton({ editing, disabled, label, onClick }: { editing: boolean; disabled: boolean; label: string; onClick: () => void }) {
