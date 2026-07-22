@@ -21,11 +21,7 @@ export class BitrixIntegrationsController {
     @Query() query: Record<string, unknown>,
     @Res() response: Response
   ) {
-    const installation = await this.integrations.install(this.withBitrixQueryContext(body, query));
-    if (installation.warnings.length) {
-      response.status(503).send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Instalação pendente</title></head><body><h1>Instalação pendente</h1><p>Não foi possível registrar todos os eventos. Verifique a PUBLIC_BACKEND_URL, os escopos e as permissões do aplicativo e abra esta tela novamente.</p></body></html>`);
-      return;
-    }
+    await this.integrations.install(this.withBitrixQueryContext(body, query));
     response.send(`<!doctype html>
 <html lang="pt-BR">
   <head>

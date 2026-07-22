@@ -94,7 +94,7 @@ im
 - `department`: converte `UF_DEPARTMENT` no nome do departamento;
 - `im`: envia notificações pessoais aos usuários selecionados.
 
-`crm` e `sign.b2e` não são usados pelo fluxo final e podem ser retirados. O instalador registra apenas `OnAppInstall` e `OnAppUninstall`.
+`crm` e `sign.b2e` não são usados pelo fluxo final e podem ser retirados. O instalador tenta registrar apenas `OnAppInstall` e `OnAppUninstall`. Esses eventos de ciclo de vida são opcionais para o fluxo ZapSign: uma falha fica registrada nos logs, mas não impede a conclusão da instalação.
 
 Referências oficiais: [`user.get`](https://apidocs.bitrix24.com/api-reference/user/user-get.html),
 [`department.get`](https://apidocs.bitrix24.com/api-reference/departments/department-get.html) e

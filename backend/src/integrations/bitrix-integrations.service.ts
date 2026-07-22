@@ -92,6 +92,17 @@ export class BitrixIntegrationsService {
     } else {
       warnings.push('PUBLIC_BACKEND_URL nao configurada; eventos nao foram registrados');
     }
+    if (warnings.length) {
+      await this.prisma.integrationLog.create({
+        data: {
+          type: 'BITRIX_LIFECYCLE_EVENTS_WARNING',
+          source: 'bitrix',
+          endpoint: publicUrl ? `${publicUrl.replace(/\/$/, '')}/integrations/bitrix/events` : undefined,
+          method: 'event.bind',
+          error: warnings.join('; ').slice(0, 2000)
+        }
+      });
+    }
     return { ok: true, memberId: auth.member_id, adminUserId: user.id, warnings };
   }
 

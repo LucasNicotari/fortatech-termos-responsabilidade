@@ -51,4 +51,19 @@ describe('BitrixIntegrationsController browser bridge', () => {
       DOMAIN: 'company.bitrix24.com.br'
     }));
   });
+
+  it('finishes installation even when optional lifecycle events have warnings', async () => {
+    integrations.install.mockResolvedValue({ warnings: ['event.get: insufficient_scope'] });
+    const target = response();
+
+    await controller.install(
+      { access_token: 'token', refresh_token: 'refresh', member_id: 'member', domain: 'company.bitrix24.com.br' },
+      {},
+      target
+    );
+
+    const html = (target.send as jest.Mock).mock.calls.at(-1)?.[0] as string;
+    expect(html).toContain('BX24.installFinish()');
+    expect(html).not.toContain('Instalação pendente');
+  });
 });
