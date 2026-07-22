@@ -58,7 +58,23 @@ describe('BitrixService sign.b2e', () => {
     ]);
 
     await expect(service.listEmployeesWithDepartments()).resolves.toEqual([
-      expect.objectContaining({ ID: '7', DEPARTMENT_NAME: 'Tecnologia / Infraestrutura' })
+      expect.objectContaining({ ID: '7', DEPARTMENT_NAME: 'Tecnologia, Infraestrutura' })
+    ]);
+  });
+
+  it('identifies a missing department scope instead of hiding the integration error', async () => {
+    const service = new BitrixService({} as never, {} as never, {} as never, {} as never, {} as never);
+    jest.spyOn(service, 'listEmployees').mockResolvedValue([
+      { ID: '7', NAME: 'Colaborador', UF_DEPARTMENT: [10] }
+    ]);
+    jest.spyOn(service, 'listDepartments').mockRejectedValue(
+      new Error('insufficient_scope: higher privileges required')
+    );
+
+    await expect(service.listEmployeesWithDepartments()).resolves.toEqual([
+      expect.objectContaining({
+        ID: '7', DEPARTMENT_NAME: '', DEPARTMENT_LOOKUP_ERROR: 'MISSING_SCOPE'
+      })
     ]);
   });
 

@@ -122,6 +122,14 @@ export function SendRequests() {
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const employeeComplete = Boolean(employeeId && name.trim() && emailValid && cpfComplete && department.trim());
   const equipmentComplete = equipment.every((item) => item.quantity >= 1 && item.description.trim());
+  const selectedEmployee = employees.find((employee) => employee.ID === employeeId);
+  const departmentHint = !employeeId || department
+    ? undefined
+    : selectedEmployee?.DEPARTMENT_LOOKUP_ERROR === 'MISSING_SCOPE'
+      ? 'Adicione a permissão Estrutura da empresa (department) ao aplicativo Bitrix24 e reinstale-o.'
+      : selectedEmployee?.DEPARTMENT_LOOKUP_ERROR === 'LOOKUP_FAILED'
+        ? 'Não foi possível consultar a estrutura da empresa no Bitrix24.'
+        : 'Departamento não localizado no perfil.';
 
   return (
     <section className="mx-auto max-w-[1280px]">
@@ -167,7 +175,7 @@ export function SendRequests() {
                     <EditButton editing={editingEmail} disabled={!employeeId} label="e-mail" onClick={() => setEditingEmail((value) => !value)} />
                   </span>
                 </label>
-                <Field label="Departamento" required value={department} readOnly hint={employeeId && !department ? 'Departamento não localizado no perfil.' : undefined} />
+                <Field label="Departamento" required value={department} readOnly hint={departmentHint} />
               </div>
               <StepFooter><span /><NextButton disabled={!employeeComplete} onClick={() => setStep(2)}>Continuar</NextButton></StepFooter>
             </div>

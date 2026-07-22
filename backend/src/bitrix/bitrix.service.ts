@@ -92,10 +92,15 @@ export class BitrixService {
       const names = new Map(departments.map((department) => [String(department.ID), department.NAME]));
       return users.map((user) => ({
         ...user,
-        DEPARTMENT_NAME: (user.UF_DEPARTMENT || []).map((id) => names.get(String(id))).filter(Boolean).join(' / ')
+        DEPARTMENT_NAME: (user.UF_DEPARTMENT || []).map((id) => names.get(String(id))).filter(Boolean).join(', ')
       }));
-    } catch {
-      return users.map((user) => ({ ...user, DEPARTMENT_NAME: '' }));
+    } catch (error) {
+      const missingScope = error instanceof Error && /insufficient_scope/i.test(error.message);
+      return users.map((user) => ({
+        ...user,
+        DEPARTMENT_NAME: '',
+        DEPARTMENT_LOOKUP_ERROR: missingScope ? 'MISSING_SCOPE' as const : 'LOOKUP_FAILED' as const
+      }));
     }
   }
 

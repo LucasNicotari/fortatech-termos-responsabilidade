@@ -19,6 +19,7 @@ export interface BitrixUser {
   PERSONAL_PHOTO?: string;
   UF_DEPARTMENT?: number[];
   DEPARTMENT_NAME?: string;
+  DEPARTMENT_LOOKUP_ERROR?: 'MISSING_SCOPE' | 'LOOKUP_FAILED';
   ACTIVE?: boolean | 'Y' | 'N';
 }
 

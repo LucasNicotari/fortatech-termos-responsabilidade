@@ -78,6 +78,7 @@ export interface BitrixEmployee {
   PERSONAL_PHOTO?: string;
   UF_DEPARTMENT?: number[];
   DEPARTMENT_NAME?: string;
+  DEPARTMENT_LOOKUP_ERROR?: 'MISSING_SCOPE' | 'LOOKUP_FAILED';
 }
 
 export interface ActivityLog {
