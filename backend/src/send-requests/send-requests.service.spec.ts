@@ -1,5 +1,10 @@
 import { SendRequestStatus, SignatureStatus } from '@prisma/client';
-import { responsibilityTermFileName, SendRequestsService, signingUrlForCurrentUser } from './send-requests.service';
+import {
+  responsibilityTermFileName,
+  SendRequestsService,
+  signingInvitationMessage,
+  signingUrlForCurrentUser
+} from './send-requests.service';
 
 describe('SendRequestsService', () => {
   it('gera o nome do PDF com o primeiro e o ultimo nome do colaborador', () => {
@@ -13,6 +18,18 @@ describe('SendRequestsService', () => {
     expect(signingUrlForCurrentUser(url, 8465, '8465')).toBe(url);
     expect(signingUrlForCurrentUser(url, 8465, '8243')).toBeUndefined();
     expect(signingUrlForCurrentUser(url, 8465)).toBeUndefined();
+  });
+
+  it('gera a mensagem formal com o nome do usuario Bitrix24 e o convite pessoal', () => {
+    const message = signingInvitationMessage(
+      'Lucas Nicotari Maffei',
+      'https://portal.bitrix24.com/marketplace/view/app/?params[signing]=secret'
+    );
+
+    expect(message).toContain('Prezado(a), [B]Lucas Nicotari Maffei[/B]');
+    expect(message).toContain('➡️ Revisar e assinar documento');
+    expect(message).toContain('pessoal, intransferível');
+    expect(message).toContain('[B]7 dias[/B]');
   });
 
   it('retorna erro de negocio quando o CPF pertence a outro colaborador', async () => {

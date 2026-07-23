@@ -238,6 +238,11 @@ export class SendRequestsService {
       if (!Number.isInteger(signerUserId) || signerUserId <= 0) {
         throw new BadRequestException('O colaborador precisa estar vinculado a um usuário do Bitrix24');
       }
+      const signerUser = await this.bitrix.getUser(signerUserId);
+      const signerName = [signerUser.NAME, signerUser.LAST_NAME]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || request.employee.nome;
       const publicUrl = this.config.get<string>('PUBLIC_BACKEND_URL');
       const clientId = this.config.get<string>('BITRIX_CLIENT_ID');
       const installation = await this.prisma.bitrixInstallation.findFirst({
@@ -278,10 +283,7 @@ export class SendRequestsService {
       try {
         chatMessageId = await this.bitrix.sendChatMessage(
           signerUserId,
-          `[B]Termo de Responsabilidade para assinatura[/B]\n`
-          + `Olá, ${request.employee.nome}. Revise o documento e registre sua assinatura dentro do Bitrix24.\n\n`
-          + `[URL=${signingUrl}]Abrir e assinar no FortaDocs[/URL]\n\n`
-          + `O convite é pessoal e expira em 7 dias.`
+          signingInvitationMessage(signerName, signingUrl)
         );
       } catch (error) {
         await this.prisma.signature.delete({ where: { id: signature.id } });
@@ -598,4 +600,13 @@ export function signingUrlForCurrentUser(
   return actorBitrixUserId && String(signerUserId) === actorBitrixUserId
     ? signingUrl
     : undefined;
+}
+
+export function signingInvitationMessage(employeeName: string, signingUrl: string) {
+  return `[B]Termo de Responsabilidade para assinatura[/B]\n\n`
+    + `Prezado(a), [B]${employeeName}[/B],\n\n`
+    + `A [B]FortaTech[/B] disponibilizou um Termo de Responsabilidade para sua assinatura eletrônica.\n\n`
+    + `Leia atentamente o documento e, estando de acordo, registre sua assinatura por meio do link abaixo:\n\n`
+    + `[URL=${signingUrl}]➡️ Revisar e assinar documento[/URL]\n\n`
+    + `Este convite é pessoal, intransferível e permanecerá disponível por [B]7 dias[/B].`;
 }

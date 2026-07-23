@@ -103,6 +103,10 @@ depender de uma coordenada fixa.
 O colaborador recebe dois sinais complementares: a mensagem persistente no chat e o alerta pessoal
 do Bitrix24. O envio não depende de e-mail.
 
+A saudação da mensagem usa o nome consultado diretamente pelo ID do usuário no Bitrix24. O texto
+informa a origem FortaTech, orienta a revisão, destaca o botão de assinatura e registra que o
+convite é pessoal, intransferível e válido por sete dias.
+
 ## Compatibilidade
 
 Registros historicos com provedor `BITRIX` ou `ZAPSIGN` continuam legiveis. Novos registros usam
