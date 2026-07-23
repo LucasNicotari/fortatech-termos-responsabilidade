@@ -116,6 +116,14 @@ export class BitrixIntegrationsService {
       throw new UnauthorizedException('Instalacao Bitrix24 nao reconhecida');
     }
     const bitrixUser = await this.bitrix.getCurrentUser(auth.accessToken, installation.clientEndpoint);
+    await this.prisma.bitrixInstallation.update({
+      where: { id: installation.id },
+      data: {
+        accessTokenEncrypted: this.crypto.encrypt(auth.accessToken),
+        expiresAt: new Date(Date.now() + 55 * 60_000),
+        active: true
+      }
+    });
     const user = await this.prisma.user.findUnique({ where: { bitrixUserId: bitrixUser.ID } });
     if (!user?.active) throw new ForbiddenException('Usuario nao autorizado para este aplicativo');
     const code = randomBytes(32).toString('base64url');

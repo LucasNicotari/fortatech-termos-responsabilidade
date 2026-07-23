@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { BitrixService } from '../bitrix/bitrix.service';
@@ -84,10 +84,16 @@ export class BitrixSignatureService {
   async options() {
     const settings = await this.getSettings();
     const companyCrmId = settings?.companyCrmId || this.defaultCompanyCrmId();
-    const [providers, users] = await Promise.all([
-      this.bitrix.listCompanyProviders(companyCrmId),
-      this.bitrix.listEmployees()
-    ]);
+    let providers: Awaited<ReturnType<BitrixService['listCompanyProviders']>>;
+    let users: Awaited<ReturnType<BitrixService['listEmployees']>>;
+    try {
+      [providers, users] = await Promise.all([
+        this.bitrix.listCompanyProviders(companyCrmId),
+        this.bitrix.listEmployees()
+      ]);
+    } catch (error) {
+      throw new ServiceUnavailableException(this.friendlyConfigurationError(error));
+    }
     return {
       companyCrmId,
       regionDocumentType: settings?.regionDocumentType || '12.999',

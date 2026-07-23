@@ -221,7 +221,7 @@ function BitrixSignatureSettings() {
         <span>O representante deve ter autorização interna para assinar pela empresa.</span>
         <span>A confirmação final é feita pelo aplicativo móvel do Bitrix24.</span>
         {save.isSuccess && <strong className="text-emerald-700">Configuração pronta.</strong>}
-        {(options.isError || save.isError) && <strong className="text-coral">Não foi possível validar. Confirme os escopos CRM e e-Signature for HR.</strong>}
+        {(options.isError || save.isError) && <strong className="text-coral">{settingsError(options.error || save.error)}</strong>}
       </div>
     </section>
   );
@@ -233,6 +233,13 @@ function CheckField({ icon, label, checked, disabled = false, onChange }: { icon
 
 function normalizeSearch(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
+}
+
+function settingsError(error: unknown) {
+  const message = (error as { response?: { data?: { message?: string | { message?: string } } } })?.response?.data?.message;
+  if (typeof message === 'string') return message;
+  if (message && typeof message === 'object' && message.message) return message.message;
+  return 'Não foi possível validar. Confirme as credenciais e os escopos do Bitrix24.';
 }
 
 function AccessSkeleton() {
