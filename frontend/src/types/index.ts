@@ -1,5 +1,5 @@
 export type SignatureStatus = 'PENDING' | 'SENT' | 'VIEWED' | 'IN_PROGRESS' | 'SIGNED' | 'FINISHED' | 'DECLINED' | 'ERROR' | 'CANCELED';
-export type SendRequestStatus = 'DRAFT' | 'READY' | 'PENDING' | 'SENDING' | 'SENT' | 'IN_PROGRESS' | 'DECLINED' | 'FAILED' | 'CANCELED';
+export type SendRequestStatus = 'DRAFT' | 'READY' | 'PENDING' | 'SENDING' | 'SENT' | 'IN_PROGRESS' | 'COMPLETED' | 'DECLINED' | 'FAILED' | 'CANCELED';
 
 export interface Employee {
   id: string;

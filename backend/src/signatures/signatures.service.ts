@@ -3,7 +3,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { ArchiveStatus, Prisma, SendRequestStatus, SignatureMethod, SignatureProvider, SignatureStatus, WebhookProcessingStatus } from '@prisma/client';
 import { createHash } from 'crypto';
 import { firstValueFrom } from 'rxjs';
-import { PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFDocument, PDFPage, PDFRawStream } from 'pdf-lib';
+import { decodePDFRawStream } from 'pdf-lib/cjs/core/streams/decode';
 import { BitrixService } from '../bitrix/bitrix.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -187,7 +188,7 @@ export class SignaturesService {
       });
       await transaction.sendRequest.update({
         where: { id: signature.sendRequestId! },
-        data: { status: SendRequestStatus.SENT }
+        data: { status: SendRequestStatus.COMPLETED }
       });
     });
     await this.notifications.notifySigned(
@@ -240,7 +241,7 @@ export class SignaturesService {
       }),
       this.prisma.sendRequest.update({
         where: { id: signature.sendRequestId },
-        data: { status: SendRequestStatus.SENT }
+        data: { status: SendRequestStatus.COMPLETED }
       })
     ]);
     await this.notifications.notifySigned(id, signature.sendRequestId, signature.employee.nome);
@@ -268,15 +269,19 @@ export class SignaturesService {
       const image = await document.embedPng(imageBytes);
       const page = document.getPages().at(-1);
       if (!page) throw new Error('PDF sem paginas');
-      const maxWidth = Math.min(210, page.getWidth() - 80);
-      const scale = Math.min(maxWidth / image.width, 72 / image.height);
-      const width = image.width * scale;
-      const height = image.height * scale;
+      const signatureLineY = this.findSignatureLineY(document, page);
+      if (signatureLineY === null) {
+        throw new BadRequestException('A linha de assinatura nao foi localizada no PDF');
+      }
+      const placement = handwrittenSignaturePlacement(
+        page.getWidth(),
+        page.getHeight(),
+        image.width,
+        image.height,
+        signatureLineY
+      );
       page.drawImage(image, {
-        x: (page.getWidth() - width) / 2,
-        y: 58,
-        width,
-        height
+        ...placement
       });
       return Buffer.from(await document.save());
     } catch (error) {
@@ -294,6 +299,19 @@ export class SignaturesService {
       throw new BadRequestException('Imagem da assinatura invalida ou maior que 1 MB');
     }
     return imageBytes;
+  }
+
+  private findSignatureLineY(document: PDFDocument, page: PDFPage) {
+    const contents = page.node.Contents();
+    if (!contents) return null;
+    const references = contents instanceof PDFArray ? contents.asArray() : [contents];
+    const decoded = references.map((reference) => {
+      const stream = document.context.lookup(reference);
+      return stream instanceof PDFRawStream
+        ? Buffer.from(decodePDFRawStream(stream).decode()).toString('latin1')
+        : '';
+    }).join('\n');
+    return findCenteredSignatureLineY(decoded, page.getWidth(), page.getHeight());
   }
 
   private async findInternalInvitation(id: string) {
@@ -644,7 +662,7 @@ export class SignaturesService {
   }
 
   private toRequestStatus(status: SignatureStatus) {
-    if (status === SignatureStatus.SIGNED || status === SignatureStatus.FINISHED) return SendRequestStatus.SENT;
+    if (status === SignatureStatus.SIGNED || status === SignatureStatus.FINISHED) return SendRequestStatus.COMPLETED;
     if (status === SignatureStatus.DECLINED) return SendRequestStatus.DECLINED;
     if (status === SignatureStatus.CANCELED) return SendRequestStatus.CANCELED;
     if (status === SignatureStatus.ERROR) return SendRequestStatus.FAILED;
@@ -654,4 +672,82 @@ export class SignaturesService {
   private toJson(value: unknown) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
   }
+}
+
+export function handwrittenSignaturePlacement(
+  pageWidth: number,
+  pageHeight: number,
+  imageWidth: number,
+  imageHeight: number,
+  signatureLineY: number
+) {
+  const maxWidth = Math.min(210, pageWidth - 80);
+  const maxHeight = 22;
+  const scale = Math.min(maxWidth / imageWidth, maxHeight / imageHeight);
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+  return {
+    x: (pageWidth - width) / 2,
+    y: Math.min(signatureLineY + 1, pageHeight - height - 24),
+    width,
+    height
+  };
+}
+
+export function findCenteredSignatureLineY(
+  content: string,
+  pageWidth: number,
+  pageHeight: number
+) {
+  const number = String.raw`(-?\d+(?:\.\d+)?)`;
+  const translatedLine = new RegExp(
+    String.raw`1(?:\.0+)?\s+0(?:\.0+)?\s+0(?:\.0+)?\s+1(?:\.0+)?\s+${number}\s+${number}\s+cm[\s\S]{0,180}?${number}\s+${number}\s+m\s+${number}\s+${number}\s+l\s+S`,
+    'g'
+  );
+  const absoluteLine = new RegExp(
+    String.raw`${number}\s+${number}\s+m\s+${number}\s+${number}\s+l\s+S`,
+    'g'
+  );
+  const candidates: Array<{ y: number; score: number }> = [];
+  const consider = (
+    translateX: number,
+    translateY: number,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number
+  ) => {
+    const width = Math.abs(endX - startX);
+    const center = translateX + (startX + endX) / 2;
+    const y = translateY + (startY + endY) / 2;
+    if (
+      ![translateX, translateY, startX, startY, endX, endY].every(Number.isFinite)
+      || Math.abs(endY - startY) > 2
+      || width < 150
+      || width > 260
+      || Math.abs(center - pageWidth / 2) > 35
+      || y < pageHeight * 0.2
+      || y > pageHeight * 0.92
+    ) return;
+    candidates.push({
+      y,
+      score: Math.abs(width - 203) + Math.abs(center - pageWidth / 2)
+    });
+  };
+  for (const match of content.matchAll(translatedLine)) {
+    const [, translateXRaw, translateYRaw, startXRaw, startYRaw, endXRaw, endYRaw] = match;
+    consider(
+      Number(translateXRaw),
+      Number(translateYRaw),
+      Number(startXRaw),
+      Number(startYRaw),
+      Number(endXRaw),
+      Number(endYRaw)
+    );
+  }
+  for (const match of content.matchAll(absoluteLine)) {
+    const [, startXRaw, startYRaw, endXRaw, endYRaw] = match;
+    consider(0, 0, Number(startXRaw), Number(startYRaw), Number(endXRaw), Number(endYRaw));
+  }
+  return candidates.sort((first, second) => first.score - second.score)[0]?.y ?? null;
 }

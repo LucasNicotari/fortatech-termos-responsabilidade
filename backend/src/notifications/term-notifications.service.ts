@@ -47,11 +47,21 @@ export class TermNotificationsService {
     externalMessage: string
   ) {
     const results: Array<{ userId: number; delivered: boolean; duplicate?: boolean }> = [];
-    const recipients = await this.prisma.sendRequestNotificationRecipient.findMany({
-      where: { sendRequestId: requestId },
-      select: { bitrixUserId: true }
-    });
-    for (const userId of recipients.map((recipient) => Number(recipient.bitrixUserId)).filter(Number.isInteger)) {
+    const [recipients, request] = await Promise.all([
+      this.prisma.sendRequestNotificationRecipient.findMany({
+        where: { sendRequestId: requestId },
+        select: { bitrixUserId: true }
+      }),
+      state === 'SIGNED'
+        ? this.prisma.sendRequest.findUnique({
+            where: { id: requestId },
+            select: { requestedBy: { select: { bitrixUserId: true } } }
+          })
+        : Promise.resolve(null)
+    ]);
+    const recipientIds = recipients.map((recipient) => Number(recipient.bitrixUserId));
+    if (state === 'SIGNED') recipientIds.push(Number(request?.requestedBy?.bitrixUserId));
+    for (const userId of [...new Set(recipientIds.filter((id) => Number.isInteger(id) && id > 0))]) {
       const eventType = `BITRIX_TERM_${state}_NOTIFIED_${userId}`;
       const existing = await this.prisma.signatureEvent.findFirst({ where: { signatureId, eventType } });
       if (existing) {

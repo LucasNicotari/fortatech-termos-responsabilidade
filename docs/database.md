@@ -53,6 +53,9 @@ erDiagram
 - O convite possui token unico, salvo somente como SHA-256.
 - Um codigo de abertura pertence a um usuario administrativo ou a um convite, nunca aos dois.
 - A conclusao do convite e atomica e impede assinatura dupla.
+- Solicitacoes concluidas usam o estado `COMPLETED`, separado de `SENT`.
+- `removed_at` e `removed_by_user_id` retiram um termo da visao operacional sem destruir a evidencia.
+- Ao remover um termo pendente, o convite e revogado e a assinatura e cancelada.
 - O PDF final so fica `ARCHIVED` depois do upload privado e do SHA-256.
 - RLS esta habilitado em todas as tabelas `app_*`.
 - `anon` e `authenticated` nao possuem DML nas tabelas internas.

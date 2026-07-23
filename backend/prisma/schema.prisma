@@ -32,6 +32,7 @@ enum SendRequestStatus {
   SENDING
   SENT
   IN_PROGRESS
+  COMPLETED
   DECLINED
   FAILED
   CANCELED
@@ -107,6 +108,7 @@ model User {
   createdAt                   DateTime                  @default(now()) @map("created_at")
   updatedAt                   DateTime                  @updatedAt @map("updated_at")
   sendRequests                SendRequest[]             @relation("RequestedSendRequests")
+  removedSendRequests         SendRequest[]             @relation("RemovedSendRequests")
   auditEvents                 AuditEvent[]              @relation("AuditActor")
   settings                    Setting[]                 @relation("SettingUpdater")
   launchCodes                 BitrixLaunchCode[]
@@ -189,6 +191,9 @@ model SendRequest {
   status              SendRequestStatus       @default(PENDING)
   requestedByUserId   String?                 @map("requested_by_user_id")
   requestedBy         User?                   @relation("RequestedSendRequests", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  removedAt           DateTime?                @map("removed_at")
+  removedByUserId     String?                  @map("removed_by_user_id")
+  removedBy           User?                   @relation("RemovedSendRequests", fields: [removedByUserId], references: [id], onDelete: SetNull)
   requestedAt         DateTime                @default(now()) @map("requested_at")
   sentAt              DateTime?               @map("sent_at")
   canceledAt          DateTime?               @map("canceled_at")
@@ -211,6 +216,8 @@ model SendRequest {
   @@index([triggerType])
   @@index([status])
   @@index([requestedByUserId])
+  @@index([removedAt])
+  @@index([removedByUserId])
   @@map("app_send_requests")
 }
 

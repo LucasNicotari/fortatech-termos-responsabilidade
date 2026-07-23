@@ -16,6 +16,7 @@ export function statusLabel(status?: string) {
     SENT: 'Enviado',
     VIEWED: 'Visualizado',
     IN_PROGRESS: 'Em assinatura',
+    COMPLETED: 'Concluído',
     SIGNED: 'Assinado',
     FINISHED: 'Finalizado',
     DECLINED: 'Recusado',

@@ -120,6 +120,17 @@ async function runEndToEnd(headers, employees) {
     || downloadedSha256 !== finished.signedSha256) {
     throw new Error('O PDF assinado local nao foi arquivado com o SHA-256 esperado');
   }
+  const removed = await request(`/send-requests/${draft.id}`, {
+    method: 'DELETE',
+    headers
+  });
+  const visibleRequests = await request('/send-requests', { headers });
+  const preservedFile = await request(`/signatures/${signature.id}/file`, { headers });
+  if (!removed.removed
+    || visibleRequests.some((item) => item.id === draft.id)
+    || !preservedFile.url) {
+    throw new Error('A remocao controlada do historico nao preservou o documento assinado');
+  }
   return { requestId: draft.id, signatureId: signature.id, bytes: signedPdf.length, sha256: downloadedSha256 };
 }
 

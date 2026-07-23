@@ -6,6 +6,7 @@ const tone: Record<string, string> = {
   VIEWED: 'bg-indigo-100 text-indigo-800',
   SIGNED: 'bg-emerald-100 text-emerald-800',
   FINISHED: 'bg-mint/15 text-mint',
+  COMPLETED: 'bg-mint/15 text-mint',
   ERROR: 'bg-coral/15 text-coral',
   CANCELED: 'bg-zinc-200 text-zinc-700',
   ACTIVE: 'bg-emerald-100 text-emerald-800',

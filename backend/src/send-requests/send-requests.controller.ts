@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -52,5 +52,14 @@ export class SendRequestsController {
   @UseGuards(TermOperatorGuard)
   retry(@Param('id') id: string) {
     return this.sendRequests.retry(id);
+  }
+
+  @Delete(':id')
+  @UseGuards(TermOperatorGuard)
+  removeFromHistory(
+    @Param('id') id: string,
+    @CurrentUser() user?: { id: string }
+  ) {
+    return this.sendRequests.removeFromHistory(id, user?.id);
   }
 }

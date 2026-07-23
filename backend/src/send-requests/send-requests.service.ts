@@ -34,6 +34,7 @@ export class SendRequestsService {
 
   findAll() {
     return this.prisma.sendRequest.findMany({
+      where: { removedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
         employee: true,
@@ -210,7 +211,7 @@ export class SendRequestsService {
         templateVersion: { include: { template: true } }
       }
     });
-    if (!request) throw new NotFoundException('Solicitacao de envio nao encontrada');
+    if (!request || request.removedAt) throw new NotFoundException('Solicitacao de envio nao encontrada');
     if (request.status !== SendRequestStatus.READY || !request.unsignedStoragePath || !request.documentFileName) {
       throw new BadRequestException('Gere e revise a previa antes do envio');
     }
@@ -422,7 +423,7 @@ export class SendRequestsService {
 
   async retry(id: string) {
     const request = await this.prisma.sendRequest.findUnique({ where: { id } });
-    if (!request) throw new NotFoundException('Solicitacao de envio nao encontrada');
+    if (!request || request.removedAt) throw new NotFoundException('Solicitacao de envio nao encontrada');
     if (request.lockedAt) throw new BadRequestException('Documento ja enviado e imutavel');
     return this.prisma.sendRequest.update({
       where: { id }, data: { status: SendRequestStatus.DRAFT, failureReason: null, unsignedStoragePath: null, unsignedSha256: null }
@@ -440,8 +441,95 @@ export class SendRequestsService {
         signatures: true
       }
     });
-    if (!request) throw new NotFoundException('Solicitacao de envio nao encontrada');
+    if (!request || request.removedAt) throw new NotFoundException('Solicitacao de envio nao encontrada');
     return request;
+  }
+
+  async removeFromHistory(id: string, actorUserId?: string) {
+    const request = await this.prisma.sendRequest.findUnique({
+      where: { id },
+      include: {
+        signatures: {
+          include: { invitation: true }
+        }
+      }
+    });
+    if (!request || request.removedAt) {
+      throw new NotFoundException('Solicitacao de envio nao encontrada');
+    }
+    const now = new Date();
+    const activeStatuses: SignatureStatus[] = [
+      SignatureStatus.PENDING,
+      SignatureStatus.SENT,
+      SignatureStatus.VIEWED,
+      SignatureStatus.IN_PROGRESS
+    ];
+    const activeSignatureIds = request.signatures
+      .filter((signature) => activeStatuses.includes(signature.status))
+      .map((signature) => signature.id);
+    const completed = request.signatures.some((signature) =>
+      signature.status === SignatureStatus.SIGNED || signature.status === SignatureStatus.FINISHED
+    );
+
+    await this.prisma.$transaction(async (transaction) => {
+      if (activeSignatureIds.length) {
+        await transaction.signingInvitation.updateMany({
+          where: {
+            signatureId: { in: activeSignatureIds },
+            completedAt: null,
+            revokedAt: null
+          },
+          data: { revokedAt: now }
+        });
+        await transaction.signature.updateMany({
+          where: { id: { in: activeSignatureIds } },
+          data: {
+            status: SignatureStatus.CANCELED,
+            canceledAt: now,
+            bitrixStage: 'Cancelado ao remover do historico'
+          }
+        });
+      }
+      await transaction.sendRequest.update({
+        where: { id },
+        data: {
+          removedAt: now,
+          removedByUserId: actorUserId || null,
+          status: completed
+            ? SendRequestStatus.COMPLETED
+            : activeSignatureIds.length
+              ? SendRequestStatus.CANCELED
+              : request.status
+        }
+      });
+      await transaction.auditEvent.create({
+        data: {
+          actorUserId: actorUserId || null,
+          entityType: 'SEND_REQUEST',
+          entityId: id,
+          action: 'REMOVED_FROM_HISTORY',
+          before: this.toJson({ status: request.status, removedAt: null }),
+          after: this.toJson({
+            status: completed
+              ? SendRequestStatus.COMPLETED
+              : activeSignatureIds.length
+                ? SendRequestStatus.CANCELED
+                : request.status,
+            removedAt: now.toISOString()
+          }),
+          metadata: this.toJson({
+            completedDocumentPreserved: completed,
+            activeInvitationsRevoked: activeSignatureIds.length
+          })
+        }
+      });
+    });
+    return {
+      id,
+      removed: true,
+      completedDocumentPreserved: completed,
+      activeInvitationsRevoked: activeSignatureIds.length
+    };
   }
 
   private async getEditable(id: string) {
@@ -454,7 +542,7 @@ export class SendRequestsService {
         templateVersion: true
       }
     });
-    if (!request) throw new NotFoundException('Solicitacao de envio nao encontrada');
+    if (!request || request.removedAt) throw new NotFoundException('Solicitacao de envio nao encontrada');
     const editableStatuses: SendRequestStatus[] = [SendRequestStatus.DRAFT, SendRequestStatus.READY, SendRequestStatus.FAILED];
     if (request.lockedAt || !editableStatuses.includes(request.status)) {
       throw new BadRequestException('Documento enviado e imutavel');

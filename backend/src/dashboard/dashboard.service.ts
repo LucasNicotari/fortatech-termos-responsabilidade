@@ -17,12 +17,13 @@ export class DashboardService {
       latestSignatures
     ] = await Promise.all([
       this.prisma.employee.count(),
-      this.prisma.sendRequest.count({ where: { status: { in: [SendRequestStatus.DRAFT, SendRequestStatus.READY, SendRequestStatus.PENDING, SendRequestStatus.SENDING, SendRequestStatus.IN_PROGRESS] } } }),
-      this.prisma.sendRequest.count({ where: { status: SendRequestStatus.SENT } }),
-      this.prisma.signature.count({ where: { status: { in: [SignatureStatus.SIGNED, SignatureStatus.FINISHED] } } }),
-      this.prisma.sendRequest.count({ where: { status: SendRequestStatus.FAILED } }),
-      this.prisma.signature.count({ where: { status: SignatureStatus.ERROR } }),
+      this.prisma.sendRequest.count({ where: { removedAt: null, status: { in: [SendRequestStatus.DRAFT, SendRequestStatus.READY, SendRequestStatus.PENDING, SendRequestStatus.SENDING, SendRequestStatus.IN_PROGRESS] } } }),
+      this.prisma.sendRequest.count({ where: { removedAt: null, status: SendRequestStatus.SENT } }),
+      this.prisma.signature.count({ where: { sendRequest: { removedAt: null }, status: { in: [SignatureStatus.SIGNED, SignatureStatus.FINISHED] } } }),
+      this.prisma.sendRequest.count({ where: { removedAt: null, status: SendRequestStatus.FAILED } }),
+      this.prisma.signature.count({ where: { sendRequest: { removedAt: null }, status: SignatureStatus.ERROR } }),
       this.prisma.signature.findMany({
+        where: { sendRequest: { removedAt: null } },
         orderBy: { updatedAt: 'desc' },
         take: 10,
         include: {

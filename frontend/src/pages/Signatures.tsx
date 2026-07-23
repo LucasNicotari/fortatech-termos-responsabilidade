@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Download, ExternalLink, FilePlus2, FileText, Package, RefreshCw, RotateCcw, Search } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, FilePlus2, FileText, Package, RefreshCw, RotateCcw, Search, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { BitrixEmployee, SendRequest, Signature } from '../types';
@@ -56,6 +56,10 @@ export function Signatures() {
     mutationFn: (signatureId: string) => api.post(`/signatures/${signatureId}/archive/retry`),
     onSuccess: invalidateTerms
   });
+  const removeHistory = useMutation({
+    mutationFn: (requestId: string) => api.delete(`/send-requests/${requestId}`),
+    onSuccess: invalidateTerms
+  });
 
   function invalidateTerms() {
     queryClient.invalidateQueries({ queryKey: ['send-requests'] });
@@ -66,6 +70,15 @@ export function Signatures() {
   async function download(signatureId: string) {
     const { data: file } = await api.get<{ url: string }>(`/signatures/${signatureId}/file`);
     window.open(file.url, '_blank', 'noopener,noreferrer');
+  }
+
+  function remove(request: SendRequest) {
+    const signature = request.signatures?.[0];
+    const completed = signature && ['SIGNED', 'FINISHED'].includes(signature.status);
+    const message = completed
+      ? 'Remover este termo do histórico visível? O PDF assinado e a auditoria continuarão preservados.'
+      : 'Remover este termo do histórico? Se houver convite de assinatura pendente, ele será cancelado.';
+    if (window.confirm(message)) removeHistory.mutate(request.id);
   }
 
   return (
@@ -107,8 +120,8 @@ export function Signatures() {
               const expanded = expandedId === request.id;
               const employeeName = request.employee?.nome || 'Colaborador não identificado';
               return (
-                <article key={request.id} className="transition hover:bg-sky-50/30">
-                  <button onClick={() => setExpandedId(expanded ? null : request.id)} aria-expanded={expanded} className="focus-ring grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left lg:grid-cols-[minmax(240px,1.4fr)_minmax(180px,1fr)_150px_130px_32px] lg:gap-4 lg:px-5">
+                <article key={request.id} className="relative transition hover:bg-sky-50/30">
+                  <button onClick={() => setExpandedId(expanded ? null : request.id)} aria-expanded={expanded} className="focus-ring grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 pr-11 text-left lg:grid-cols-[minmax(240px,1.4fr)_minmax(180px,1fr)_150px_130px_32px] lg:gap-4 lg:px-5 lg:pr-12">
                     <span className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
                       <UserAvatar name={employeeName} photoUrl={photosById.get(String(request.employee?.bitrixId))} />
                       <span className="min-w-0"><strong className="block truncate text-sm text-ink">{employeeName}</strong><span className="block truncate text-xs text-steel">{request.employee?.email || 'Sem e-mail'}{request.employee?.bitrixId ? ` · ID ${request.employee.bitrixId}` : ''}</span></span>
@@ -117,6 +130,16 @@ export function Signatures() {
                     <span><StatusBadge status={status} /></span>
                     <span className="text-xs text-steel">{formatDate(signature?.updatedAt || request.updatedAt)}</span>
                     <ChevronDown size={17} className={`text-steel transition ${expanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Remover do histórico"
+                    aria-label={`Remover o termo de ${employeeName} do histórico`}
+                    disabled={removeHistory.isPending}
+                    onClick={() => remove(request)}
+                    className="focus-ring absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full text-zinc-400 transition hover:bg-red-50 hover:text-coral disabled:opacity-40"
+                  >
+                    <X size={13} />
                   </button>
 
                   {expanded && (
@@ -183,7 +206,7 @@ function matchesFilter(request: SendRequest, filter: TermFilter) {
   const signatureStatus = request.signatures?.[0]?.status;
   if (filter === 'DRAFT') return ['DRAFT', 'READY'].includes(request.status);
   if (filter === 'WAITING') return Boolean(signatureStatus && ['PENDING', 'SENT', 'VIEWED', 'IN_PROGRESS'].includes(signatureStatus)) || ['PENDING', 'SENDING', 'SENT', 'IN_PROGRESS'].includes(request.status);
-  if (filter === 'COMPLETED') return Boolean(signatureStatus && ['SIGNED', 'FINISHED'].includes(signatureStatus));
+  if (filter === 'COMPLETED') return request.status === 'COMPLETED' || Boolean(signatureStatus && ['SIGNED', 'FINISHED'].includes(signatureStatus));
   if (filter === 'ATTENTION') return ['FAILED', 'CANCELED'].includes(request.status) || Boolean(signatureStatus && ['DECLINED', 'ERROR', 'CANCELED'].includes(signatureStatus));
   return true;
 }

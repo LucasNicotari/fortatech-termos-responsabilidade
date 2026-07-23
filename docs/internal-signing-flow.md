@@ -46,7 +46,9 @@ sequenceDiagram
     API->>API: Incorpora assinatura e calcula hashes
     API->>Storage: Grava PDF assinado
     API->>DB: Conclui convite, assinatura e auditoria
+    API->>DB: Marca a solicitacao como COMPLETED
     API->>Chat: Notifica todas as pessoas selecionadas
+    API->>Chat: Notifica automaticamente quem criou o termo
     API-->>Sign: Confirmacao e link temporario do PDF final
 ```
 
@@ -99,4 +101,17 @@ stateDiagram-v2
 - bucket privado e URLs temporarias;
 - limite de 1 MB e validacao de assinatura PNG;
 - operacao de conclusao atomica para impedir assinatura dupla;
+- convite concluido nao volta a aceitar assinatura e informa que nao existe acao pendente;
+- assinatura posicionada pela linha real do PDF, sem coordenada fixa de pagina;
+- imagem recortada no navegador e limitada ao espaco entre a data e a linha;
 - SHA-256 do desenho e do PDF final na trilha de auditoria.
+
+## Remocao do historico
+
+O `X` da tela Termos faz uma remocao logica e auditada:
+
+- rascunhos somem da visao operacional;
+- convites pendentes sao revogados e a assinatura passa para cancelada;
+- PDFs ja assinados, hashes e eventos continuam preservados;
+- dashboard e lista ignoram itens removidos;
+- a auditoria registra usuario, horario, estado anterior e cancelamento do convite.

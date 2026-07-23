@@ -1,3 +1,4 @@
+import { SendRequestStatus, SignatureStatus } from '@prisma/client';
 import { responsibilityTermFileName, SendRequestsService, signingUrlForCurrentUser } from './send-requests.service';
 
 describe('SendRequestsService', () => {
@@ -42,5 +43,59 @@ describe('SendRequestsService', () => {
       departamento: 'Tecnologia',
       equipment: [{ quantity: 1, description: 'Notebook local' }]
     })).rejects.toThrow('O CPF informado ja pertence a outro colaborador');
+  });
+
+  it('remove da lista, revoga o convite pendente e preserva a auditoria', async () => {
+    const transaction = {
+      signingInvitation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      signature: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      sendRequest: { update: jest.fn().mockResolvedValue({}) },
+      auditEvent: { create: jest.fn().mockResolvedValue({}) }
+    };
+    const prisma = {
+      sendRequest: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'request-1',
+          status: SendRequestStatus.SENT,
+          removedAt: null,
+          signatures: [{
+            id: 'signature-1',
+            status: SignatureStatus.SENT,
+            invitation: { id: 'invitation-1' }
+          }]
+        })
+      },
+      $transaction: jest.fn(async (callback: (client: typeof transaction) => unknown) => callback(transaction))
+    };
+    const service = new SendRequestsService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+
+    await expect(service.removeFromHistory('request-1', 'user-1')).resolves.toEqual({
+      id: 'request-1',
+      removed: true,
+      completedDocumentPreserved: false,
+      activeInvitationsRevoked: 1
+    });
+    expect(transaction.signingInvitation.updateMany).toHaveBeenCalled();
+    expect(transaction.signature.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: SignatureStatus.CANCELED })
+    }));
+    expect(transaction.sendRequest.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        removedByUserId: 'user-1',
+        status: SendRequestStatus.CANCELED
+      })
+    }));
+    expect(transaction.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: 'REMOVED_FROM_HISTORY' })
+    }));
   });
 });

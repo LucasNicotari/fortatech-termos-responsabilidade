@@ -158,7 +158,7 @@ export function SigningExperience({
         method,
         typedName: method === 'TYPED' ? typedName.trim() : undefined,
         accepted,
-        signatureDataUrl: canvas.toDataURL('image/png')
+        signatureDataUrl: trimmedSignatureDataUrl(canvas)
       });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Não foi possível concluir a assinatura.');
@@ -177,8 +177,8 @@ export function SigningExperience({
         icon={<CheckCircle2 className="text-b24-green" size={46} />}
         title="Assinatura concluída"
         message={local
-          ? 'O teste foi concluído e o PDF ficou arquivado somente no ambiente local.'
-          : 'O Termo de Responsabilidade foi assinado e arquivado. Os responsáveis selecionados foram notificados.'}
+          ? 'O teste foi concluído. Não existe mais nenhuma assinatura pendente para você neste termo.'
+          : 'O termo foi assinado e arquivado. Não existe mais nenhuma ação pendente para você, e o responsável pelo envio foi notificado.'}
         action={session.downloadUrl
           ? <a href={session.downloadUrl} className="focus-ring mt-5 inline-flex items-center gap-2 rounded-lg bg-b24-blue px-4 py-2.5 text-sm font-semibold text-white"><Download size={17} /> Baixar documento assinado</a>
           : undefined}
@@ -242,6 +242,51 @@ export function SigningExperience({
       </div>
     </main>
   );
+}
+
+function trimmedSignatureDataUrl(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext('2d');
+  if (!context) return canvas.toDataURL('image/png');
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  let left = canvas.width;
+  let top = canvas.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      const index = (y * canvas.width + x) * 4;
+      const alpha = pixels.data[index + 3];
+      const white = pixels.data[index] > 247
+        && pixels.data[index + 1] > 247
+        && pixels.data[index + 2] > 247;
+      if (alpha < 12 || white) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < left || bottom < top) return canvas.toDataURL('image/png');
+  const margin = 10;
+  const sourceX = Math.max(0, left - margin);
+  const sourceY = Math.max(0, top - margin);
+  const sourceWidth = Math.min(canvas.width - sourceX, right - left + 1 + margin * 2);
+  const sourceHeight = Math.min(canvas.height - sourceY, bottom - top + 1 + margin * 2);
+  const output = document.createElement('canvas');
+  output.width = sourceWidth;
+  output.height = sourceHeight;
+  output.getContext('2d')?.drawImage(
+    canvas,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    sourceWidth,
+    sourceHeight
+  );
+  return output.toDataURL('image/png');
 }
 
 function MethodButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof PenLine; label: string; onClick: () => void }) {

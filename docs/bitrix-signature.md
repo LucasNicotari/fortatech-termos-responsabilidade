@@ -92,6 +92,14 @@ inclusive a si mesmo.
 Os selecionados recebem notificacao no envio e na conclusao. A trilha de eventos impede a mesma
 notificacao de ser registrada duas vezes para o mesmo usuario e estado.
 
+Quem criou o termo tambem recebe automaticamente a notificacao de conclusao, mesmo que nao tenha
+sido marcado manualmente. Ao reabrir um convite concluido, o colaborador ve que a assinatura ja
+foi finalizada e que nao existe nova acao pendente.
+
+A imagem final e recortada para remover margens vazias e aplicada sobre a linha de assinatura
+localizada dinamicamente na ultima pagina. Isso acompanha a mudanca de altura do conteudo sem
+depender de uma coordenada fixa.
+
 O colaborador recebe dois sinais complementares: a mensagem persistente no chat e o alerta pessoal
 do Bitrix24. O envio não depende de e-mail.
 
