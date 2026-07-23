@@ -1,5 +1,31 @@
 services:
+  postgres-roles:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      PGPASSWORD: fortatech
+    command:
+      - psql
+      - -h
+      - postgres
+      - -U
+      - fortatech
+      - -d
+      - fortatech_termos
+      - -v
+      - ON_ERROR_STOP=1
+      - -f
+      - /local-supabase-roles.sql
+    volumes:
+      - ./backend/prisma/local-supabase-roles.sql:/local-supabase-roles.sql:ro
+
   backend:
+    depends_on:
+      postgres-roles:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://fortatech:fortatech@postgres:5432/fortatech_termos?schema=public
       DIRECT_URL: postgresql://fortatech:fortatech@postgres:5432/fortatech_termos?schema=public

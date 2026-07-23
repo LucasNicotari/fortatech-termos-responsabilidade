@@ -33,6 +33,11 @@ export interface SendRequest {
   documentFileName?: string;
   unsignedSha256?: string;
   equipment?: Equipment[];
+  notificationRecipients?: Array<{
+    bitrixUserId: string;
+    name: string;
+    email?: string;
+  }>;
   signatures?: Signature[];
   createdAt: string;
   updatedAt: string;
@@ -42,7 +47,7 @@ export interface Signature {
   id: string;
   employee?: Employee;
   employeeId: string;
-  provider?: 'BITRIX' | 'ZAPSIGN';
+  provider?: 'BITRIX' | 'ZAPSIGN' | 'FORTADOCS';
   providerDocumentId?: string;
   bitrixDocumentId?: string;
   bitrixDocumentUid?: string;

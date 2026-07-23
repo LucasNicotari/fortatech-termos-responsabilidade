@@ -47,7 +47,11 @@ export class TermNotificationsService {
     externalMessage: string
   ) {
     const results: Array<{ userId: number; delivered: boolean; duplicate?: boolean }> = [];
-    for (const userId of await this.workflow.notificationRecipientIds()) {
+    const recipients = await this.prisma.sendRequestNotificationRecipient.findMany({
+      where: { sendRequestId: requestId },
+      select: { bitrixUserId: true }
+    });
+    for (const userId of recipients.map((recipient) => Number(recipient.bitrixUserId)).filter(Number.isInteger)) {
       const eventType = `BITRIX_TERM_${state}_NOTIFIED_${userId}`;
       const existing = await this.prisma.signatureEvent.findFirst({ where: { signatureId, eventType } });
       if (existing) {

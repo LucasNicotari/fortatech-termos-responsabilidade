@@ -115,6 +115,11 @@ export class BitrixIntegrationsController {
             client_endpoint: auth.client_endpoint || (domain ? 'https://' + domain + '/rest/' : ''),
             server_endpoint: auth.server_endpoint || 'https://oauth.bitrix.info/rest/'
           });
+          query.forEach(function (value, key) {
+            if (values[key] === undefined || values[key] === null || values[key] === '') {
+              values[key] = value;
+            }
+          });
           var form = document.createElement('form');
           form.method = 'post';
           form.action = window.location.href;

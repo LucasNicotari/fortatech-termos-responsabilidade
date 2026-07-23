@@ -9,10 +9,12 @@ import { ZapSignWebhookController } from './zapsign-webhook.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { LocalSignaturesController } from './local-signatures.controller';
+import { AuthModule } from '../auth/auth.module';
+import { InternalSignaturesController } from './internal-signatures.controller';
 
 @Module({
-  imports: [BitrixModule, StorageModule, HttpModule, SignatureProvidersModule, NotificationsModule, WorkflowModule],
-  controllers: [SignaturesController, ZapSignWebhookController, LocalSignaturesController],
+  imports: [AuthModule, BitrixModule, StorageModule, HttpModule, SignatureProvidersModule, NotificationsModule, WorkflowModule],
+  controllers: [SignaturesController, ZapSignWebhookController, LocalSignaturesController, InternalSignaturesController],
   providers: [SignaturesService],
   exports: [SignaturesService]
 })

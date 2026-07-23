@@ -38,10 +38,25 @@ export class AuthService {
     const codeHash = createHash('sha256').update(code).digest('hex');
     const launchCode = await this.prisma.bitrixLaunchCode.findUnique({
       where: { codeHash },
-      include: { user: true }
+      include: {
+        user: true,
+        signingInvitation: {
+          include: { signature: { include: { employee: true } } }
+        }
+      }
     });
-    if (!launchCode || launchCode.usedAt || launchCode.expiresAt <= new Date() || !launchCode.user.active) {
+    if (!launchCode || launchCode.usedAt || launchCode.expiresAt <= new Date()) {
       throw new UnauthorizedException('Codigo de inicializacao invalido ou expirado');
+    }
+    const invitation = launchCode.signingInvitation;
+    if (invitation && (
+      invitation.revokedAt
+      || invitation.expiresAt <= new Date()
+    )) {
+      throw new UnauthorizedException('Convite de assinatura invalido ou expirado');
+    }
+    if (!invitation && !launchCode.user?.active) {
+      throw new UnauthorizedException('Usuario nao autorizado');
     }
     const consumed = await this.prisma.bitrixLaunchCode.updateMany({
       where: { id: launchCode.id, usedAt: null, expiresAt: { gt: new Date() } },
@@ -50,8 +65,26 @@ export class AuthService {
     if (consumed.count !== 1) {
       throw new UnauthorizedException('Codigo de inicializacao ja utilizado');
     }
-    const user = launchCode.user;
-    return this.session(user);
+    if (invitation) {
+      const employee = invitation.signature.employee;
+      const accessToken = await this.jwt.signAsync({
+        sub: invitation.id,
+        scope: 'SIGN_DOCUMENT',
+        bitrixUserId: invitation.bitrixUserId,
+        signatureId: invitation.signatureId
+      }, { expiresIn: 60 * 60 });
+      return {
+        accessToken,
+        accessMode: 'SIGNER',
+        user: {
+          name: employee.nome,
+          email: employee.email,
+          role: 'SIGNER',
+          bitrixUserId: invitation.bitrixUserId
+        }
+      };
+    }
+    return this.session(launchCode.user!);
   }
 
   private async session(user: { id: string; name: string; email: string; role: UserRole; bitrixUserId: string | null }) {
@@ -62,6 +95,7 @@ export class AuthService {
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     return {
       accessToken,
+      accessMode: 'ADMIN',
       user: { id: user.id, name: user.name, email: user.email, role: user.role, bitrixUserId: user.bitrixUserId }
     };
   }

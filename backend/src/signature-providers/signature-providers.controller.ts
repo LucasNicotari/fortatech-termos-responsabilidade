@@ -13,7 +13,7 @@ export class SignatureProvidersController {
 
   @Get('status')
   status() {
-    return this.bitrixSignature.status();
+    return this.bitrixSignature.internalStatus();
   }
 
   @Get('options')

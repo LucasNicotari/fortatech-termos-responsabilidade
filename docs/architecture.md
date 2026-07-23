@@ -1,156 +1,130 @@
-# Arquitetura e fluxo do FortaDocs
+# Arquitetura do FortaDocs
 
-## Visão geral
+## Visao geral
 
-O FortaDocs é uma aplicação web de servidor incorporada ao Bitrix24. O Bitrix24 fornece identidade, cadastro corporativo, notificações, assinatura B2E e o Cofre da empresa; o Supabase guarda os dados e cópias privadas dos arquivos. O backend é a única camada autorizada a acessar segredos e recursos privilegiados.
+O FortaDocs e um aplicativo de servidor incorporado ao Bitrix24. O portal fornece identidade,
+usuarios, departamentos, fotos e chat. O FortaDocs gera os documentos e executa a assinatura em
+uma tela propria aberta dentro do Bitrix24. PostgreSQL e Storage privados ficam no Supabase.
 
 ```mermaid
 flowchart LR
-  subgraph B24[Bitrix24 - fortaeqt.bitrix24.com.br]
-    OP[Operador RH ou TI]
-    DIR[Usuários, fotos e departamentos]
-    NOTIF[Notificações pessoais]
-    B2E[e-Signature for HR]
-    SAFE[Cofre da empresa]
+  subgraph B24[Bitrix24]
+    ADMIN[Operadores e administradores]
+    USERS[Usuarios, fotos e departamentos]
+    CHAT[Chat pessoal]
+    SLIDER[Slider REST_APP_URI]
   end
 
   subgraph RENDER[Render HTTPS]
-    WEB[Frontend React\nfortatech-termos-web-hml]
-    API[Backend NestJS\nfortatech-termos-api-hml]
-    DOC[Docxtemplater + LibreOffice]
+    WEB[React / Vite]
+    API[NestJS]
+    DOC[Docxtemplater + LibreOffice + pdf-lib]
   end
 
   subgraph SUPA[Supabase HML]
-    DB[(PostgreSQL\ntabelas app_*)]
-    STORE[(Storage privado\nresponsibility-terms)]
+    DB[(PostgreSQL)]
+    STORAGE[(Bucket privado)]
   end
 
-  REP[Representante autorizado]
-  COL[Colaborador signatário]
+  SIGNER[Colaborador signatario]
+  NOTIFIED[Pessoas notificadas]
 
-  OP -->|abre no iframe| WEB
-  WEB -->|JWT curto e API HTTPS| API
-  API <-->|OAuth REST| DIR
-  API -->|mensagem pessoal| NOTIF
-  API <-->|Prisma pelo pooler| DB
-  API <-->|URLs temporárias e arquivos| STORE
-  API --> DOC
-  DOC -->|PDF revisado| STORE
-  API -->|PDF + representante + colaborador| B2E
-  B2E -->|aviso no Messenger| REP
-  REP -->|revisa e confirma no app móvel| B2E
-  B2E -->|libera a assinatura| COL
-  COL -->|assina no Bitrix24| B2E
-  B2E -->|eventos document/member| API
-  B2E --> SAFE
-  API -->|recupera PDF concluído| SAFE
-  API -->|PDF final + SHA-256| STORE
+  ADMIN --> WEB
+  WEB --> API
+  API <--> USERS
+  API --> CHAT
+  CHAT --> SIGNER
+  SIGNER --> SLIDER
+  SLIDER --> WEB
+  API <--> DB
+  DOC --> API
+  API <--> STORAGE
+  API --> NOTIFIED
 ```
 
-## Sequência ponta a ponta
+## Componentes
+
+| Componente | Responsabilidade |
+|---|---|
+| Frontend React | Painel administrativo e experiencia exclusiva do signatario |
+| API NestJS | Autorizacao, regras, PDF, convites, chat, notificacoes e auditoria |
+| Prisma/PostgreSQL | Dados operacionais, snapshots, convites e trilha de eventos |
+| Supabase Storage | DOCX de origem, PDFs sem assinatura e PDFs finais |
+| Bitrix24 OAuth | Confirma o usuario atual no painel e no link de assinatura |
+| `im.message.add` | Envia o convite ao chat pessoal do colaborador |
+| `REST_APP_URI` | Abre o FortaDocs dentro do portal com contexto do convite |
+
+## Identidades e sessoes
+
+Existem dois contextos isolados:
+
+1. **Administrativo**: o usuario precisa estar ativo em `app_users`. O JWT concede acesso ao
+   painel conforme perfil e configuracao de operador.
+2. **Signatario**: o usuario nao precisa receber acesso ao painel. O JWT possui
+   `scope=SIGN_DOCUMENT`, referencia um unico convite e e aceito somente em `/signing/*`.
+
+O token do convite nao autentica sozinho. O backend tambem consulta `user.current` e exige que o
+ID Bitrix24 seja igual ao colaborador do documento.
 
 ```mermaid
-sequenceDiagram
-  autonumber
-  actor Operador as Lucas/Osmar
-  participant Bitrix as Bitrix24
-  participant Web as Frontend Render
-  participant API as Backend Render
-  participant DB as Supabase PostgreSQL
-  participant Storage as Supabase Storage
-  participant Sign as Bitrix24 B2E
-  actor Representante
-  actor Colaborador
-  participant Avisados as Nicoly/Marcelo
-
-  Operador->>Bitrix: Abre FortaDocs pelo menu
-  Bitrix->>API: POST /integrations/bitrix/launch com OAuth
-  API->>Bitrix: user.current
-  API->>DB: valida usuário e gera código de uso único (2 min)
-  API-->>Bitrix: redireciona para o frontend com launchCode
-  Bitrix->>Web: carrega o iframe
-  Web->>API: troca launchCode por JWT
-  API-->>Web: sessão e permissões
-  Web->>API: consulta usuários ativos
-  API->>Bitrix: user.get + department.get
-  Bitrix-->>API: perfil, foto, e-mail, cargo e departamento
-  API-->>Web: lista normalizada e alfabética
-  Operador->>Web: seleciona pessoa, informa CPF e equipamentos
-  Web->>API: cria rascunho
-  API->>DB: snapshot do colaborador e equipamentos
-  Operador->>Web: solicita prévia
-  Web->>API: POST /send-requests/:id/preview
-  API->>API: preenche DOCX e converte para PDF
-  API->>Storage: salva unsigned/... com SHA-256
-  Storage-->>Web: URL assinada por 5 minutos
-  Operador->>Web: revisa e confirma envio
-  Web->>API: POST /send-requests/:id/send
-  API->>Sign: sign.b2e.document.send
-  Note over API,Sign: empresa + provedor + responsável + representante + colaborador + PDF
-  Sign-->>Representante: HR bot / item urgente
-  API->>Bitrix: notifica envio aos usuários configurados
-  Bitrix-->>Avisados: aviso “aguardando representante”
-  Representante->>Sign: revisa e clica em Enviar documento
-  Representante->>Sign: confirma assinatura no aplicativo móvel
-  Sign-->>Colaborador: libera a solicitação de assinatura
-  Colaborador->>Sign: revisa e assina no Bitrix24
-  Sign->>API: OnSignB2eDocumentStatusChanged
-  Sign->>API: OnSignB2eMemberStatusChanged
-  API->>Sign: sign.b2e.document.get
-  Sign->>Bitrix: arquiva no Cofre da empresa
-  API->>Bitrix: consulta sign.b2e.mysafe.tail
-  API->>Storage: baixa e arquiva signed/... + SHA-256
-  API->>DB: status concluído e trilha de auditoria
-  API->>Bitrix: notifica conclusão
-  Bitrix-->>Avisados: aviso “termo assinado”
+flowchart TD
+  OPEN[Bitrix24 abre o manipulador] --> KIND{Existe signing em PLACEMENT_OPTIONS?}
+  KIND -- Nao --> ADMINCHECK{Usuario ativo no FortaDocs?}
+  ADMINCHECK -- Sim --> ADMINJWT[JWT administrativo]
+  ADMINCHECK -- Nao --> DENY[Acesso negado]
+  KIND -- Sim --> TOKEN[Calcula SHA-256 do token]
+  TOKEN --> INVITE{Convite valido?}
+  INVITE -- Nao --> DENY
+  INVITE -- Sim --> ID{user.current = colaborador?}
+  ID -- Nao --> DENY
+  ID -- Sim --> SIGNJWT[JWT SIGN_DOCUMENT]
 ```
 
-## Estados do termo
+## Dados principais
 
-```mermaid
-stateDiagram-v2
-  [*] --> DRAFT: operador cria
-  DRAFT --> READY: PDF gerado e revisável
-  READY --> SENDING: envio reivindicado atomicamente
-  SENDING --> SENT: Bitrix24 aceitou
-  SENDING --> FAILED: falha técnica
-  FAILED --> DRAFT: operador solicita nova tentativa
-  SENT --> IN_PROGRESS: representante ou colaborador iniciou
-  SENT --> DECLINED: participante recusou
-  IN_PROGRESS --> FINISHED: representante e colaborador assinaram
-  SENT --> FINISHED: evento final
-  FINISHED --> ARCHIVED: PDF validado e SHA-256 salvo
-  FINISHED --> ARCHIVE_FAILED: falha no download ou Storage
-  ARCHIVE_FAILED --> ARCHIVED: reprocessamento manual
-  DECLINED --> [*]
-  ARCHIVED --> [*]
-```
+| Tabela | Uso |
+|---|---|
+| `app_users` | Usuarios administrativos autorizados |
+| `app_employees` | Snapshot minimo do colaborador |
+| `app_send_requests` | Solicitacao, arquivo e status do termo |
+| `app_send_request_equipment` | Equipamentos imutaveis do documento |
+| `app_send_request_notification_recipients` | Notificados escolhidos para aquele termo |
+| `app_signatures` | Estado agregado e hashes do PDF final |
+| `app_signing_invitations` | Convite, validade, metodo e evidencia da assinatura |
+| `app_signature_events` | Eventos idempotentes de envio, abertura e conclusao |
+| `app_bitrix_installations` | OAuth do aplicativo, criptografado |
+| `app_bitrix_launch_codes` | Codigos de abertura de uso unico |
 
-## Responsabilidades e acesso
+## Geracao e assinatura do documento
 
-| Papel | O que faz | O que não faz |
-|---|---|---|
-| Administrador | Libera acesso, define perfil, operadores, notificados e templates | Não assina automaticamente pelo colaborador |
-| Operador | Cria o rascunho, informa CPF/equipamentos, revisa e envia | Não altera um documento depois do envio |
-| Notificado | Recebe avisos de envio e conclusão no Bitrix24 | Não participa da assinatura |
-| Representante | Revisa e assina em nome da empresa quando formalmente autorizado | Não pode ter a assinatura inserida automaticamente pelo FortaDocs |
-| Colaborador | Recebe a solicitação depois do representante e assina no Bitrix24 | Não acessa o painel interno do FortaDocs |
-| Backend | Orquestra OAuth, PDF, assinatura, arquivo e auditoria | Não expõe chaves ao navegador |
+1. O DOCX versionado recebe nome, CPF, data e equipamentos.
+2. O LibreOffice converte o documento para PDF.
+3. A API calcula SHA-256, envia o PDF ao bucket privado e retorna uma URL temporaria.
+4. No envio, a API cria assinatura `FORTADOCS`, convite e destinatarios de notificacao.
+5. O colaborador abre o link no chat e escolhe assinatura digitada, desenhada ou imagem.
+6. O frontend normaliza a assinatura para PNG.
+7. O backend valida o PNG, incorpora-o na ultima pagina e calcula novos hashes.
+8. O PDF final e arquivado e o convite e concluido em transacao atomica.
 
-Uma pessoa pode acumular perfil administrativo, operação e notificações. **Acessar o FortaDocs**, **Perfil e Setor**, **Gerenciar Termos** e **Receber Notificações** são controles independentes.
+O diagrama detalhado de sequencia, estados e controles esta em
+[internal-signing-flow.md](internal-signing-flow.md).
 
-## Fronteiras de segurança
+## Seguranca
 
-- O iframe aceita somente `https://fortaeqt.bitrix24.com.br`.
-- O código de abertura é de uso único, armazenado como hash e expira em dois minutos.
-- Tokens OAuth do Bitrix24 são cifrados com `BITRIX_TOKEN_ENCRYPTION_KEY`.
-- O Bitrix24 recebe o PDF e os identificadores dos participantes por OAuth com escopos `crm` e `sign.b2e`.
-- Eventos B2E são validados pelo `application_token` do aplicativo e deduplicados.
-- `anon` e `authenticated` não possuem DML nas tabelas `app_*`; o Prisma acessa PostgreSQL no servidor.
-- O bucket é privado; URLs de download expiram em cinco minutos.
-- O PDF final é validado pelo cabeçalho, limitado em tamanho e registrado com SHA-256.
-- CPF, tokens e conteúdo do documento não devem aparecer nos logs.
+- segredos somente no backend e no painel do Render;
+- tokens OAuth criptografados em repouso;
+- tabelas `app_*` com RLS e sem DML para `anon`/`authenticated`;
+- bucket privado e URLs assinadas de curta duracao;
+- token de convite armazenado apenas como hash;
+- codigo de abertura de dois minutos e uso unico;
+- sessao do signatario limitada a uma hora;
+- checagem de identidade pelo Bitrix24 em cada abertura;
+- assinatura limitada a PNG de 1 MB no backend;
+- conclusao atomica, SHA-256 e trilha de eventos;
+- dados pessoais ausentes de logs de integracao.
 
-## Implantação
+## Legado
 
-Cada push na branch `main` aciona o Blueprint do Render. O backend executa `prisma migrate deploy`, seed idempotente e inicia a API. O frontend é compilado com a URL pública da API. A configuração interativa do aplicativo local no Bitrix24 deve apontar para as URLs permanentes descritas no [runbook](homologation-runbook.md).
+Registros antigos dos provedores `BITRIX` e `ZAPSIGN` permanecem consultaveis e nao sao apagados.
+Novos termos usam `FORTADOCS`. As rotinas antigas ficam isoladas para compatibilidade ate que o
+periodo de retencao dos registros historicos termine.

@@ -1,6 +1,6 @@
 import { HttpService } from '@nestjs/axios';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ArchiveStatus, Prisma, SendRequestStatus, SignatureProvider, SignatureStatus, WebhookProcessingStatus } from '@prisma/client';
+import { ArchiveStatus, Prisma, SendRequestStatus, SignatureMethod, SignatureProvider, SignatureStatus, WebhookProcessingStatus } from '@prisma/client';
 import { createHash } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { PDFDocument } from 'pdf-lib';
@@ -11,6 +11,7 @@ import { ZapSignService } from '../signature-providers/zapsign.service';
 import { ZapSignDocument } from '../signature-providers/zapsign.types';
 import { SyncSignaturesDto } from './dto/sync-signatures.dto';
 import { TermNotificationsService } from '../notifications/term-notifications.service';
+import { CompleteInternalSignatureDto } from './dto/complete-internal-signature.dto';
 
 const STATUS_MAP: Record<string, SignatureStatus> = {
   pending: SignatureStatus.PENDING,
@@ -87,6 +88,111 @@ export class SignaturesService {
     return this.getLocalSigningSession(token);
   }
 
+  async getInternalSigningSession(invitationId: string) {
+    const invitation = await this.findInternalInvitation(invitationId);
+    const signature = invitation.signature;
+    if (!signature.sendRequest?.unsignedStoragePath) {
+      throw new BadRequestException('Documento sem PDF para assinatura');
+    }
+    const finished = Boolean(invitation.completedAt)
+      || signature.status === SignatureStatus.SIGNED
+      || signature.status === SignatureStatus.FINISHED;
+    const sourcePath = finished && signature.signedStoragePath
+      ? signature.signedStoragePath
+      : signature.sendRequest.unsignedStoragePath;
+    return {
+      employeeName: signature.employee.nome,
+      documentName: signature.sendRequest.documentFileName || 'Termo de Responsabilidade.pdf',
+      status: signature.status,
+      finished,
+      expiresAt: invitation.expiresAt,
+      previewUrl: await this.storage.createSignedUrl(sourcePath, 900, false),
+      downloadUrl: finished && signature.signedStoragePath
+        ? await this.storage.createSignedUrl(
+          signature.signedStoragePath,
+          300,
+          signature.sendRequest.documentFileName || 'Termo_de_Responsabilidade.pdf'
+        )
+        : null
+    };
+  }
+
+  async completeInternalSigning(invitationId: string, dto: CompleteInternalSignatureDto) {
+    if (!dto.accepted) throw new BadRequestException('Confirme a leitura e concordancia antes de assinar');
+    const invitation = await this.findInternalInvitation(invitationId);
+    if (invitation.completedAt) return this.getInternalSigningSession(invitationId);
+    if (dto.method === SignatureMethod.TYPED && !dto.typedName?.trim()) {
+      throw new BadRequestException('Digite o nome usado na assinatura');
+    }
+    const signature = invitation.signature;
+    if (!signature.sendRequestId || !signature.sendRequest?.unsignedStoragePath) {
+      throw new BadRequestException('Documento de origem indisponivel');
+    }
+    const sourcePdf = await this.storage.download(signature.sendRequest.unsignedStoragePath);
+    const imageBytes = this.signatureImageBytes(dto.signatureDataUrl);
+    const pdf = await this.applyHandwrittenSignature(sourcePdf, dto.signatureDataUrl);
+    const pdfSha256 = createHash('sha256').update(pdf).digest('hex');
+    const imageSha256 = createHash('sha256').update(imageBytes).digest('hex');
+    const now = new Date();
+    const path = `signed/fortadocs/${now.getFullYear()}/${signature.employee.bitrixId || signature.employeeId}/${signature.sendRequestId}-${pdfSha256}.pdf`;
+    await this.storage.upload(path, pdf, 'application/pdf', true);
+    await this.prisma.$transaction(async (transaction) => {
+      const claimed = await transaction.signingInvitation.updateMany({
+        where: { id: invitationId, completedAt: null, revokedAt: null, expiresAt: { gt: now } },
+        data: {
+          acceptedAt: now,
+          completedAt: now,
+          signatureMethod: dto.method,
+          signatureImageSha256: imageSha256
+        }
+      });
+      if (claimed.count !== 1) throw new BadRequestException('Este termo ja foi assinado ou o convite expirou');
+      await transaction.signature.update({
+        where: { id: signature.id },
+        data: {
+          status: SignatureStatus.FINISHED,
+          rawStatusCode: 'fortadocs-signed',
+          bitrixStage: 'Assinado pelo colaborador no FortaDocs',
+          signedAt: now,
+          finishedAt: now,
+          archiveStatus: ArchiveStatus.ARCHIVED,
+          signedStoragePath: path,
+          signedSha256: pdfSha256,
+          signedFileSize: pdf.length,
+          archivedAt: now,
+          lastSyncedAt: now,
+          errorMessage: null
+        }
+      });
+      await transaction.signatureEvent.create({
+        data: {
+          signatureId: signature.id,
+          eventType: 'FORTADOCS_SIGNATURE_COMPLETED',
+          status: SignatureStatus.FINISHED,
+          bitrixStage: 'Assinado pelo colaborador no FortaDocs',
+          payload: {
+            bitrixUserId: invitation.bitrixUserId,
+            method: dto.method,
+            typedName: dto.method === SignatureMethod.TYPED ? dto.typedName?.trim() : undefined,
+            accepted: true,
+            signatureImageSha256: imageSha256,
+            signedPdfSha256: pdfSha256
+          }
+        }
+      });
+      await transaction.sendRequest.update({
+        where: { id: signature.sendRequestId! },
+        data: { status: SendRequestStatus.SENT }
+      });
+    });
+    await this.notifications.notifySigned(
+      signature.id,
+      signature.sendRequestId,
+      signature.employee.nome
+    );
+    return this.getInternalSigningSession(invitationId);
+  }
+
   async simulateLocalSignature(id: string, signatureDataUrl?: string) {
     if (!this.zapSign.isLocalMode()) throw new BadRequestException('Simulacao disponivel apenas no modo local');
     const signature = await this.findOne(id);
@@ -151,13 +257,7 @@ export class SignaturesService {
   }
 
   private async applyHandwrittenSignature(sourcePdf: Buffer, dataUrl: string) {
-    const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
-    if (!match) throw new BadRequestException('Assinatura precisa ser uma imagem PNG valida');
-    const imageBytes = Buffer.from(match[1], 'base64');
-    if (!imageBytes.length || imageBytes.length > 1_000_000
-      || imageBytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
-      throw new BadRequestException('Imagem da assinatura invalida ou maior que 1 MB');
-    }
+    const imageBytes = this.signatureImageBytes(dataUrl);
     try {
       const document = await PDFDocument.load(sourcePdf);
       const image = await document.embedPng(imageBytes);
@@ -178,6 +278,35 @@ export class SignaturesService {
       if (error instanceof BadRequestException) throw error;
       throw new BadRequestException('Nao foi possivel aplicar a assinatura ao PDF');
     }
+  }
+
+  private signatureImageBytes(dataUrl: string) {
+    const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+    if (!match) throw new BadRequestException('Assinatura precisa ser uma imagem PNG valida');
+    const imageBytes = Buffer.from(match[1], 'base64');
+    if (!imageBytes.length || imageBytes.length > 1_000_000
+      || imageBytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
+      throw new BadRequestException('Imagem da assinatura invalida ou maior que 1 MB');
+    }
+    return imageBytes;
+  }
+
+  private async findInternalInvitation(id: string) {
+    const invitation = await this.prisma.signingInvitation.findUnique({
+      where: { id },
+      include: {
+        signature: {
+          include: { employee: true, sendRequest: true }
+        }
+      }
+    });
+    if (!invitation
+      || invitation.revokedAt
+      || invitation.expiresAt <= new Date()
+      || invitation.signature.provider !== SignatureProvider.FORTADOCS) {
+      throw new NotFoundException('Solicitacao de assinatura indisponivel');
+    }
+    return invitation;
   }
 
   async sync(dto: SyncSignaturesDto) {
@@ -251,6 +380,7 @@ export class SignaturesService {
     await this.prisma.signature.update({
       where: { id }, data: { archiveStatus: ArchiveStatus.PENDING, archiveError: null }
     });
+    if (signature.provider === SignatureProvider.FORTADOCS) return this.findOne(id);
     return signature.provider === SignatureProvider.ZAPSIGN
       ? this.archiveZapSign(id)
       : this.archiveBitrix(id);
@@ -273,6 +403,7 @@ export class SignaturesService {
 
   private async syncOne(id: string, eventStatus?: string, payload?: unknown) {
     const signature = await this.findOne(id);
+    if (signature.provider === SignatureProvider.FORTADOCS) return signature;
     if (signature.provider === SignatureProvider.ZAPSIGN) {
       return this.syncZapSign(signature, eventStatus, payload);
     }

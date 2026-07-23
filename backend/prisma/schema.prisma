@@ -65,8 +65,17 @@ enum SignatureStatus {
 enum SignatureProvider {
   BITRIX
   ZAPSIGN
+  FORTADOCS
 
   @@map("app_signature_provider")
+}
+
+enum SignatureMethod {
+  TYPED
+  DRAWN
+  UPLOADED
+
+  @@map("app_signature_method")
 }
 
 enum ArchiveStatus {
@@ -193,6 +202,7 @@ model SendRequest {
   attempts            SendAttempt[]
   signatures          Signature[]
   equipment           SendRequestEquipment[]
+  notificationRecipients SendRequestNotificationRecipient[]
   createdAt           DateTime                @default(now()) @map("created_at")
   updatedAt           DateTime                @updatedAt @map("updated_at")
 
@@ -202,6 +212,21 @@ model SendRequest {
   @@index([status])
   @@index([requestedByUserId])
   @@map("app_send_requests")
+}
+
+model SendRequestNotificationRecipient {
+  id            String      @id @default(cuid())
+  sendRequestId String      @map("send_request_id")
+  sendRequest   SendRequest @relation(fields: [sendRequestId], references: [id], onDelete: Cascade)
+  bitrixUserId  String      @map("bitrix_user_id")
+  name          String
+  email         String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@unique([sendRequestId, bitrixUserId])
+  @@index([sendRequestId])
+  @@index([bitrixUserId])
+  @@map("app_send_request_notification_recipients")
 }
 
 model SendAttempt {
@@ -252,6 +277,7 @@ model Signature {
   signedFileSize       Int?                     @map("signed_file_size")
   bitrixSafeDocumentId String?                  @map("bitrix_safe_document_id")
   archivedAt           DateTime?                @map("archived_at")
+  invitation           SigningInvitation?
   events               SignatureEvent[]
   createdAt            DateTime                 @default(now()) @map("created_at")
   updatedAt            DateTime                 @updatedAt @map("updated_at")
@@ -264,6 +290,30 @@ model Signature {
   @@index([bitrixStage])
   @@index([archiveStatus])
   @@map("app_signatures")
+}
+
+model SigningInvitation {
+  id                   String           @id @default(cuid())
+  signatureId          String           @unique @map("signature_id")
+  signature            Signature        @relation(fields: [signatureId], references: [id], onDelete: Cascade)
+  tokenHash            String           @unique @map("token_hash")
+  bitrixUserId         String           @map("bitrix_user_id")
+  expiresAt            DateTime         @map("expires_at")
+  openedAt             DateTime?        @map("opened_at")
+  acceptedAt           DateTime?        @map("accepted_at")
+  completedAt          DateTime?        @map("completed_at")
+  revokedAt            DateTime?        @map("revoked_at")
+  signatureMethod      SignatureMethod? @map("signature_method")
+  signatureImageSha256 String?          @map("signature_image_sha256")
+  chatMessageId        String?          @map("chat_message_id")
+  launchCodes          BitrixLaunchCode[]
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  @@index([bitrixUserId])
+  @@index([expiresAt])
+  @@index([completedAt])
+  @@map("app_signing_invitations")
 }
 
 model SendRequestEquipment {
@@ -303,15 +353,18 @@ model BitrixInstallation {
 }
 
 model BitrixLaunchCode {
-  id        String    @id @default(cuid())
-  codeHash  String    @unique @map("code_hash")
-  userId    String    @map("user_id")
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id                  String             @id @default(cuid())
+  codeHash            String             @unique @map("code_hash")
+  userId              String?            @map("user_id")
+  user                User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  signingInvitationId String?            @map("signing_invitation_id")
+  signingInvitation   SigningInvitation? @relation(fields: [signingInvitationId], references: [id], onDelete: Cascade)
+  expiresAt           DateTime           @map("expires_at")
+  usedAt              DateTime?          @map("used_at")
+  createdAt           DateTime           @default(now()) @map("created_at")
 
   @@index([userId])
+  @@index([signingInvitationId])
   @@index([expiresAt])
   @@map("app_bitrix_launch_codes")
 }

@@ -72,12 +72,7 @@ export class BitrixIntegrationsService {
       const handler = `${publicUrl.replace(/\/$/, '')}/integrations/bitrix/events`;
       try {
         const boundEvents = await this.bitrix.listBoundEvents(auth.access_token, auth.client_endpoint);
-        for (const event of [
-          'OnAppInstall',
-          'OnAppUninstall',
-          'OnSignB2eDocumentStatusChanged',
-          'OnSignB2eMemberStatusChanged'
-        ]) {
+        for (const event of ['OnAppInstall', 'OnAppUninstall']) {
           const alreadyBound = (boundEvents || []).some((item) =>
             item.event.toLowerCase() === event.toLowerCase() &&
             item.handler.replace(/\/$/, '') === handler.replace(/\/$/, '')
@@ -91,6 +86,13 @@ export class BitrixIntegrationsService {
         }
       } catch (error) {
         warnings.push(`event.get: ${error instanceof Error ? error.message : 'falha'}`);
+      }
+      try {
+        await this.bitrix.ensureRestAppUriPlacement(
+          `${publicUrl.replace(/\/$/, '')}/integrations/bitrix/launch`
+        );
+      } catch (error) {
+        warnings.push(`REST_APP_URI: ${error instanceof Error ? error.message : 'falha'}`);
       }
     } else {
       warnings.push('PUBLIC_BACKEND_URL nao configurada; eventos nao foram registrados');
@@ -124,9 +126,54 @@ export class BitrixIntegrationsService {
         active: true
       }
     });
+    const code = randomBytes(32).toString('base64url');
+    const signingToken = this.signingTokenFromPlacement(payload);
+    if (signingToken) {
+      const invitation = await this.prisma.signingInvitation.findUnique({
+        where: { tokenHash: createHash('sha256').update(signingToken).digest('hex') },
+        include: { signature: { include: { employee: true } } }
+      });
+      if (!invitation
+        || invitation.revokedAt
+        || invitation.expiresAt <= new Date()
+        || invitation.bitrixUserId !== String(bitrixUser.ID)
+        || invitation.signature.employee.bitrixId !== String(bitrixUser.ID)) {
+        throw new ForbiddenException('Este termo nao pertence ao usuario conectado ou o convite expirou');
+      }
+      await this.prisma.$transaction([
+        this.prisma.bitrixLaunchCode.create({
+          data: {
+            codeHash: createHash('sha256').update(code).digest('hex'),
+            signingInvitationId: invitation.id,
+            expiresAt: new Date(Date.now() + 2 * 60_000)
+          }
+        }),
+        this.prisma.signingInvitation.update({
+          where: { id: invitation.id },
+          data: { openedAt: invitation.openedAt || new Date() }
+        }),
+        ...(invitation.completedAt ? [] : [
+          this.prisma.signature.update({
+            where: { id: invitation.signatureId },
+            data: { status: 'VIEWED', viewedAt: invitation.signature.viewedAt || new Date(), bitrixStage: 'Aberto pelo colaborador no Bitrix24' }
+          }),
+          this.prisma.signatureEvent.create({
+            data: {
+              signatureId: invitation.signatureId,
+              eventType: 'FORTADOCS_SIGNING_OPENED',
+              status: 'VIEWED',
+              payload: { bitrixUserId: bitrixUser.ID }
+            }
+          })
+        ])
+      ]);
+      return {
+        code,
+        frontendUrl: `${(this.config.get<string>('FRONTEND_URL') || 'http://localhost:5173').replace(/\/$/, '')}/sign`
+      };
+    }
     const user = await this.prisma.user.findUnique({ where: { bitrixUserId: bitrixUser.ID } });
     if (!user?.active) throw new ForbiddenException('Usuario nao autorizado para este aplicativo');
-    const code = randomBytes(32).toString('base64url');
     await this.prisma.bitrixLaunchCode.create({
       data: {
         codeHash: createHash('sha256').update(code).digest('hex'),
@@ -246,6 +293,19 @@ export class BitrixIntegrationsService {
     );
     if (!accessToken || !memberId || !domain) throw new BadRequestException('Contexto de abertura Bitrix24 incompleto');
     return { accessToken, memberId, domain };
+  }
+
+  private signingTokenFromPlacement(payload: Record<string, unknown>) {
+    if (String(payload.PLACEMENT || '').toUpperCase() !== 'REST_APP_URI') return '';
+    const raw = payload.PLACEMENT_OPTIONS;
+    if (typeof raw !== 'string' || !raw.trim()) return '';
+    try {
+      const options = JSON.parse(raw) as Record<string, unknown>;
+      const token = String(options.signing || '');
+      return /^[A-Za-z0-9_-]{32,128}$/.test(token) ? token : '';
+    } catch {
+      return '';
+    }
   }
 
   private validatePortalDomain(rawDomain: string) {

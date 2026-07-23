@@ -171,6 +171,32 @@ export class BitrixService {
     });
   }
 
+  sendChatMessage(userId: number, message: string) {
+    return this.call<number>('im.message.add', {
+      DIALOG_ID: String(userId),
+      MESSAGE: message,
+      SYSTEM: 'N',
+      URL_PREVIEW: 'N'
+    });
+  }
+
+  async ensureRestAppUriPlacement(handler: string) {
+    const placements = await this.call<Array<{ placement?: string; handler?: string }>>('placement.get');
+    const normalizedHandler = handler.replace(/\/$/, '');
+    const exists = (placements || []).some((item) =>
+      String(item.placement || '').toUpperCase() === 'REST_APP_URI'
+      && String(item.handler || '').replace(/\/$/, '') === normalizedHandler
+    );
+    if (exists) return false;
+    await this.call<boolean>('placement.bind', {
+      PLACEMENT: 'REST_APP_URI',
+      HANDLER: handler,
+      TITLE: 'Assinar no FortaDocs',
+      DESCRIPTION: 'Assinatura de Termo de Responsabilidade'
+    });
+    return true;
+  }
+
   getDocument(uid: string) {
     return this.call<BitrixDocumentResult>('sign.b2e.document.get', { uid, language: 'pt' });
   }
@@ -297,6 +323,9 @@ export class BitrixService {
     }
     if (method === 'user.current') return LOCAL_BITRIX_USERS[0];
     if (method === 'im.notify.personal.add') return Date.now();
+    if (method === 'im.message.add') return Date.now();
+    if (method === 'placement.get') return [];
+    if (method === 'placement.bind') return true;
     if (method === 'sign.b2e.company.provider.list') {
       return [{
         code: 'local',

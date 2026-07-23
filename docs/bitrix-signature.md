@@ -1,55 +1,97 @@
-# Assinatura nativa do Bitrix24
+# Assinatura interna do FortaDocs no Bitrix24
 
-## Decisão
+## Decisao atual
 
-Novos termos usam o **Bitrix24 e-Signature for HR**. A integração pública disponível para aplicativos locais é a API B2E (`sign.b2e`). A integração antiga da ZapSign permanece no código somente para consultar registros históricos e para a simulação local sem envio real.
+Novos Termos de Responsabilidade nao usam mais o processo B2E com assinatura de representante.
+O FortaDocs cria o PDF, envia um link pessoal ao chat do colaborador e abre a experiencia de
+assinatura dentro do proprio Bitrix24.
 
-O FortaDocs não grava nem reutiliza uma imagem da assinatura do representante. A API cria a solicitação, mas a assinatura continua sendo uma ação pessoal e auditável no Bitrix24.
+Somente o colaborador escolhido assina. Operadores e pessoas notificadas acompanham o processo,
+mas nao adicionam assinatura ao documento.
 
-## Configuração única
+## Escopos do aplicativo local
 
-O aplicativo local precisa dos escopos:
+Mantenha estes escopos:
 
 ```text
+basic
+user
 user_basic
 department
 im
-crm
-sign.b2e
+placement
 ```
 
-Em **Configurações > Usuários e acessos > Assinatura Bitrix24**:
+- `im` permite enviar a mensagem ao chat pessoal com `im.message.add`.
+- `placement` permite registrar `REST_APP_URI`, usado para abrir o link em um slider do portal.
+- `user`, `user_basic` e `department` identificam o colaborador e completam os dados do termo.
 
-1. confirme a empresa `FORTA TECH` (`CRM 67539`);
-2. confira o provedor localizado automaticamente pelo Bitrix24;
-3. escolha o representante formalmente autorizado;
-4. clique em **Salvar**.
+Os escopos `crm` e `sign.b2e` nao sao necessarios para novos documentos. Eles podem permanecer
+temporariamente enquanto registros antigos do B2E ainda precisarem ser consultados.
 
-Ao salvar, o backend registra, se ainda faltarem:
+Depois de alterar os escopos, salve e reinstale o aplicativo local para o Bitrix24 emitir um novo
+OAuth. Os caminhos continuam:
 
-- `OnSignB2eDocumentStatusChanged`;
-- `OnSignB2eMemberStatusChanged`.
+```text
+Manipulador:
+https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/launch
 
-O operador que clicar em **Enviar pelo Bitrix24** é informado como responsável pelo documento. O representante permanece fixo até que um administrador altere a configuração.
+Instalacao inicial:
+https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/install
+```
 
-## Uso diário
+## Fluxo de envio
 
-1. Lucas, Osmar ou outro operador autorizado cria e revisa o termo no FortaDocs.
-2. O botão **Enviar pelo Bitrix24** chama `sign.b2e.document.send`.
-3. O representante recebe uma mensagem do HR bot e vê o documento em **e-Signature for HR > Meus documentos > Urgente**.
-4. O representante revisa, clica em **Enviar documento** e confirma no aplicativo móvel.
-5. O Bitrix24 libera a assinatura ao colaborador.
-6. Depois das assinaturas, os eventos atualizam o FortaDocs.
-7. O backend recupera o PDF do Cofre da empresa, valida o arquivo, calcula SHA-256 e arquiva uma cópia no Storage privado.
+1. Um operador cria o termo e escolhe o colaborador.
+2. O operador escolhe zero ou mais pessoas a notificar. Nao existe limite fixo no FortaDocs.
+3. A API gera o PDF, grava-o no bucket privado e cria um convite aleatorio valido por sete dias.
+4. Apenas o SHA-256 do token do convite fica no banco.
+5. A API registra o manipulador `REST_APP_URI`, se ainda nao estiver registrado.
+6. `im.message.add` envia ao chat do colaborador um link no formato:
 
-O botão **Abrir Bitrix24 para assinar** é apenas um atalho para o portal. A ação pendente também chega pelo Messenger do Bitrix24.
+   ```text
+   /marketplace/view/CLIENT_ID/?params[signing]=TOKEN
+   ```
 
-## Por que não existe “assinar automaticamente”
+7. O Bitrix24 abre o link dentro do portal e envia `PLACEMENT_OPTIONS` ao backend.
+8. O backend consulta `user.current` e confere:
 
-`sign.b2e.document.send` cria e envia o processo, mas a API pública não oferece um método para executar a assinatura em nome de um usuário. O Bitrix24 exige a confirmação pessoal do representante no aplicativo móvel. Automatizar essa confirmação fora do mecanismo oficial eliminaria a evidência de autoria e não é suportado.
+   - token valido;
+   - convite ativo e nao expirado;
+   - ID do usuario conectado igual ao ID do colaborador;
+   - colaborador da solicitacao igual ao usuario conectado.
 
-Referências oficiais:
+9. Uma sessao restrita de uma hora e emitida. Essa sessao acessa somente `/signing/*` e nao abre
+   Dashboard, Termos, Configuracoes ou APIs administrativas.
 
-- [Enviar documento com `sign.b2e.document.send`](https://apidocs.bitrix24.com/api-reference/sign/sign-b2e-document-send.html)
-- [Listar provedores da empresa](https://apidocs.bitrix24.com/api-reference/sign/sign-b2e-company-provider-list.html)
-- [Assinar em nome da empresa](https://helpdesk.bitrix24.com/open/20687898/)
+## Formas de assinatura
+
+O colaborador pode:
+
+- desenhar com mouse, touchpad ou toque;
+- digitar o nome, convertido em imagem de assinatura;
+- importar PNG ou JPG de ate 1 MB, convertido para PNG antes do envio.
+
+Antes de finalizar, a confirmacao de leitura e autoria e obrigatoria. A imagem e incorporada ao
+PDF; o FortaDocs registra metodo, horario, ID Bitrix24, SHA-256 da imagem e SHA-256 do PDF final.
+A imagem isolada nao e mantida como arquivo reutilizavel.
+
+## Notificacoes
+
+A lista e propria de cada termo. A configuracao global de usuarios serve apenas como selecao
+inicial; no passo de revisao o operador pode remover ou adicionar qualquer usuario ativo,
+inclusive a si mesmo.
+
+Os selecionados recebem notificacao no envio e na conclusao. A trilha de eventos impede a mesma
+notificacao de ser registrada duas vezes para o mesmo usuario e estado.
+
+## Compatibilidade
+
+Registros historicos com provedor `BITRIX` ou `ZAPSIGN` continuam legiveis. Novos registros usam
+`FORTADOCS`. Nenhum documento historico e convertido ou apagado pela migration.
+
+## Referencias oficiais
+
+- [Mensagem em chat com `im.message.add`](https://apidocs.bitrix24.com/api-reference/chats/messages/im-message-add.html)
+- [Link interno com `REST_APP_URI`](https://apidocs.bitrix24.com/api-reference/widgets/universal/app-url.html)
+- [Registro do manipulador com `placement.bind`](https://apidocs.bitrix24.com/api-reference/widgets/placement-bind.html)

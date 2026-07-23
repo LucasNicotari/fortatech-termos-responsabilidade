@@ -1,7 +1,7 @@
 import { TermNotificationsService } from './term-notifications.service';
 
 describe('TermNotificationsService', () => {
-  it('notifica Nicoly e Marcelo sem duplicar eventos concluidos', async () => {
+  it('notifica os destinatarios escolhidos no termo sem duplicar eventos concluidos', async () => {
     const findFirst = jest.fn()
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: 'existing' });
@@ -9,7 +9,15 @@ describe('TermNotificationsService', () => {
     const sendPersonalNotification = jest.fn().mockResolvedValue(123);
     const service = new TermNotificationsService(
       { sendPersonalNotification } as never,
-      { signatureEvent: { findFirst, create } } as never,
+      {
+        sendRequestNotificationRecipient: {
+          findMany: jest.fn().mockResolvedValue([
+            { bitrixUserId: '7718' },
+            { bitrixUserId: '8137' }
+          ])
+        },
+        signatureEvent: { findFirst, create }
+      } as never,
       { create: jest.fn() } as never,
       { notificationRecipientIds: () => Promise.resolve([7718, 8137]) } as never
     );

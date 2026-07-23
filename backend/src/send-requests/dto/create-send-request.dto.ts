@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, ArrayUnique, IsArray, IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 
 export class EquipmentDto {
   @IsInt() @Min(1) quantity!: number;
@@ -20,6 +20,8 @@ export class CreateSendRequestDto {
   @IsOptional() @IsString() templateVersionId?: string;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => EquipmentDto)
   equipment!: EquipmentDto[];
+  @IsOptional() @IsArray() @ArrayUnique() @Type(() => Number) @IsInt({ each: true }) @Min(1, { each: true })
+  notificationRecipientBitrixUserIds?: number[];
 }
 
 export class UpdateSendRequestDto extends CreateSendRequestDto {}

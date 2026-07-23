@@ -76,12 +76,13 @@ npm.cmd run test:local
 ## Documentação
 
 - [Arquitetura e diagramas do fluxo](docs/architecture.md)
+- [Fluxo detalhado da assinatura interna](docs/internal-signing-flow.md)
 - [Runbook de homologação e implantação](docs/homologation-runbook.md)
 - [Desenvolvimento local](docs/local-development.md)
 - [Testes por Cloudflare Tunnel](docs/local-cloudflare-tests.md)
 - [Banco de dados](docs/database.md)
 - [Supabase](docs/supabase.md)
-- [Assinatura nativa Bitrix24](docs/bitrix-signature.md)
+- [Assinatura interna no Bitrix24](docs/bitrix-signature.md)
 - [Segurança e operação](docs/security-operations.md)
 - [Revisão jurídica](docs/legal-review-checklist.md)
 - [Otimização das imagens Docker](docs/docker-optimization-report.md)

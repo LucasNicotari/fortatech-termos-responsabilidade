@@ -1,62 +1,69 @@
 # Banco de dados
 
-O schema funcional fica em `public` e contém 16 tabelas com prefixo `app_`. Os schemas internos do Supabase não são modificados.
+O schema funcional fica em `public` e contem 18 tabelas com prefixo `app_`. Os schemas internos do
+Supabase nao sao modificados.
 
 ## Relacionamentos principais
 
 ```mermaid
 erDiagram
   app_users ||--o{ app_send_requests : solicita
-  app_users ||--o{ app_audit_events : executa
-  app_users ||--o{ app_bitrix_launch_codes : recebe
-  app_users ||--o{ app_term_workflow_participants : atualiza
+  app_users ||--o{ app_bitrix_launch_codes : abre
   app_employees ||--o{ app_send_requests : recebe
   app_employees ||--o{ app_signatures : assina
   app_document_templates ||--o{ app_document_template_versions : possui
   app_document_template_versions ||--o{ app_send_requests : gera
-  app_document_template_versions ||--o{ app_signatures : referencia
-  app_send_requests ||--o{ app_send_request_equipment : contém
+  app_send_requests ||--o{ app_send_request_equipment : contem
   app_send_requests ||--o{ app_send_attempts : tenta
+  app_send_requests ||--o{ app_send_request_notification_recipients : notifica
   app_send_requests ||--o{ app_signatures : inicia
+  app_signatures ||--o| app_signing_invitations : convida
   app_signatures ||--o{ app_signature_events : registra
+  app_signing_invitations ||--o{ app_bitrix_launch_codes : autoriza
 ```
 
 ## Tabelas
 
 | Tabela | Responsabilidade |
 |---|---|
-| `app_users` | Identidade interna vinculada ao ID Bitrix, perfil e estado de acesso |
-| `app_term_workflow_participants` | Operadores e destinatários de notificações editáveis |
-| `app_employees` | Snapshot mínimo do colaborador usado nos termos |
-| `app_document_templates` | Tipo lógico do documento |
-| `app_document_template_versions` | Versões imutáveis do DOCX e hash da origem |
-| `app_send_requests` | Agregado central do termo, estado e PDF não assinado |
-| `app_send_request_equipment` | Equipamentos imutáveis do termo |
-| `app_send_attempts` | Tentativas técnicas de envio ao provedor |
-| `app_signatures` | Estado normalizado da assinatura e do arquivamento |
-| `app_signature_events` | Linha do tempo e deduplicação de avisos |
-| `app_webhook_events` | Eventos externos sanitizados e idempotentes |
-| `app_bitrix_installations` | Instalação e tokens OAuth cifrados |
-| `app_bitrix_launch_codes` | Códigos de login de uso único e curta duração |
-| `app_integration_logs` | Diagnóstico técnico sem CPF, documento ou tokens |
-| `app_audit_events` | Auditoria de configurações e templates |
-| `app_settings` | Configurações operacionais não secretas |
-
-Estruturas antigas de lote, senha local, empresa, convite e participantes duplicados foram removidas pela migration `20260722153000_remove_redundant_fields`.
+| `app_users` | Identidade interna, perfil e estado de acesso |
+| `app_term_workflow_participants` | Operadores e selecao inicial de notificacoes |
+| `app_employees` | Snapshot minimo do colaborador |
+| `app_document_templates` | Tipo logico do documento |
+| `app_document_template_versions` | Versoes imutaveis do DOCX |
+| `app_send_requests` | Agregado central e PDF sem assinatura |
+| `app_send_request_equipment` | Equipamentos imutaveis do termo |
+| `app_send_request_notification_recipients` | Notificados escolhidos para aquele termo |
+| `app_send_attempts` | Tentativas tecnicas de envio |
+| `app_signatures` | Estado, provedor e PDF final |
+| `app_signing_invitations` | Convite, validade, metodo e hashes da assinatura |
+| `app_signature_events` | Linha do tempo e deduplicacao de avisos |
+| `app_webhook_events` | Eventos externos historicos sanitizados |
+| `app_bitrix_installations` | Instalacao e OAuth cifrado |
+| `app_bitrix_launch_codes` | Codigos de abertura de uso unico |
+| `app_integration_logs` | Diagnostico sem segredos ou documentos |
+| `app_audit_events` | Auditoria de configuracoes e templates |
+| `app_settings` | Configuracoes operacionais nao secretas |
 
 ## Regras
 
-- O snapshot de pessoa e equipamentos preserva o conteúdo usado no momento do envio.
-- Depois de enviado, o termo fica bloqueado para edição.
-- Apenas uma tentativa pode reivindicar um termo `READY`; a atualização atômica impede envio duplo.
-- O token externo da assinatura é único e o evento externo possui chave idempotente.
-- O PDF concluído só fica `ARCHIVED` depois de upload privado e cálculo de SHA-256.
-- RLS está habilitado em todas as tabelas `app_*` e `anon`/`authenticated` não possuem DML.
+- Pessoa, equipamentos e notificados sao preservados por solicitacao.
+- Depois do envio, o termo fica bloqueado para edicao.
+- Apenas uma tentativa pode reivindicar um termo `READY`.
+- O convite possui token unico, salvo somente como SHA-256.
+- Um codigo de abertura pertence a um usuario administrativo ou a um convite, nunca aos dois.
+- A conclusao do convite e atomica e impede assinatura dupla.
+- O PDF final so fica `ARCHIVED` depois do upload privado e do SHA-256.
+- RLS esta habilitado em todas as tabelas `app_*`.
+- `anon` e `authenticated` nao possuem DML nas tabelas internas.
 
 ## Migrations
 
-- Migrations já aplicadas nunca são editadas; toda mudança recebe uma nova pasta versionada.
-- `DIRECT_URL` é usada para `prisma migrate deploy`.
-- `DATABASE_URL` com pooler é usada no runtime.
-- `prisma migrate reset` é proibido no projeto remoto.
-- Exclusão ou alteração destrutiva exige auditoria de dados, backup e janela controlada.
+- Migrations aplicadas nunca sao editadas.
+- `DIRECT_URL` e usada em `prisma migrate deploy`.
+- `DATABASE_URL` com pooler e usada no runtime.
+- `prisma migrate reset` e proibido no projeto remoto.
+- Alteracao destrutiva exige backup, auditoria e janela controlada.
+
+A migration `20260723170000_internal_bitrix_signing` e aditiva e preserva todos os registros
+historicos dos provedores Bitrix B2E e ZapSign.

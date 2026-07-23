@@ -3,6 +3,7 @@ import { api } from '../services/api';
 
 interface AuthContextValue {
   token: string | null;
+  accessMode: 'ADMIN' | 'SIGNER' | null;
   user: { id?: string; name: string; email: string; role: string; bitrixUserId?: string } | null;
   loading: boolean;
   error: string | null;
@@ -13,6 +14,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => sessionStorage.getItem('fortatech.token'));
+  const [accessMode, setAccessMode] = useState<AuthContextValue['accessMode']>(
+    () => sessionStorage.getItem('fortatech.accessMode') as AuthContextValue['accessMode']
+  );
   const [user, setUser] = useState<AuthContextValue['user']>(() => {
     const stored = sessionStorage.getItem('fortatech.user');
     return stored ? JSON.parse(stored) : null;
@@ -34,8 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     request
       .then(({ data }) => {
         sessionStorage.setItem('fortatech.token', data.accessToken);
+        sessionStorage.setItem('fortatech.accessMode', data.accessMode || 'ADMIN');
         sessionStorage.setItem('fortatech.user', JSON.stringify(data.user));
         setToken(data.accessToken);
+        setAccessMode(data.accessMode || 'ADMIN');
         setUser(data.user);
       })
       .catch((requestError) => setError(requestError.response?.data?.message || 'Nao foi possivel iniciar pelo Bitrix24'))
@@ -44,13 +50,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     sessionStorage.removeItem('fortatech.token');
+    sessionStorage.removeItem('fortatech.accessMode');
     sessionStorage.removeItem('fortatech.user');
     setToken(null);
+    setAccessMode(null);
     setUser(null);
     if (import.meta.env.VITE_LOCAL_DEVELOPMENT_MODE === 'true') window.location.reload();
   }
 
-  const value = useMemo(() => ({ token, user, loading, error, logout }), [token, user, loading, error]);
+  const value = useMemo(
+    () => ({ token, accessMode, user, loading, error, logout }),
+    [token, accessMode, user, loading, error]
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

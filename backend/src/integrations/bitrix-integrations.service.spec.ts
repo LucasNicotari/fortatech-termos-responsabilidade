@@ -118,16 +118,12 @@ describe('BitrixIntegrationsService installation', () => {
       }
     };
     const handler = 'https://backend.example.com/integrations/bitrix/events';
-    const events = [
-      'OnAppInstall',
-      'OnAppUninstall',
-      'OnSignB2eDocumentStatusChanged',
-      'OnSignB2eMemberStatusChanged'
-    ];
+    const events = ['OnAppInstall', 'OnAppUninstall'];
     const bitrix = {
       getCurrentUser: jest.fn().mockResolvedValue({ ID: '1', NAME: 'Admin' }),
       listBoundEvents: jest.fn().mockResolvedValue(events.map((event) => ({ event: event.toUpperCase(), handler }))),
-      bindEvent: jest.fn()
+      bindEvent: jest.fn(),
+      ensureRestAppUriPlacement: jest.fn().mockResolvedValue(false)
     };
     const crypto = { encrypt: jest.fn((value: string) => `encrypted-${value}`), hash: jest.fn() };
     const config = { get: jest.fn((key: string) => {
@@ -146,9 +142,12 @@ describe('BitrixIntegrationsService installation', () => {
 
     expect(result.warnings).toEqual([]);
     expect(bitrix.bindEvent).not.toHaveBeenCalled();
+    expect(bitrix.ensureRestAppUriPlacement).toHaveBeenCalledWith(
+      'https://backend.example.com/integrations/bitrix/launch'
+    );
   });
 
-  it('registers lifecycle and native signature events', async () => {
+  it('registers lifecycle events and the internal signing placement', async () => {
     const prisma = {
       bitrixInstallation: { upsert: jest.fn().mockResolvedValue({ id: 'installation-1' }) },
       user: {
@@ -159,7 +158,8 @@ describe('BitrixIntegrationsService installation', () => {
     const bitrix = {
       getCurrentUser: jest.fn().mockResolvedValue({ ID: '1', NAME: 'Admin' }),
       listBoundEvents: jest.fn().mockResolvedValue([]),
-      bindEvent: jest.fn().mockResolvedValue(true)
+      bindEvent: jest.fn().mockResolvedValue(true),
+      ensureRestAppUriPlacement: jest.fn().mockResolvedValue(true)
     };
     const config = { get: jest.fn((key: string) => {
       if (key === 'PUBLIC_BACKEND_URL') return 'https://backend.example.com';
@@ -181,9 +181,8 @@ describe('BitrixIntegrationsService installation', () => {
 
     expect(bitrix.bindEvent.mock.calls.map(([event]) => event)).toEqual([
       'OnAppInstall',
-      'OnAppUninstall',
-      'OnSignB2eDocumentStatusChanged',
-      'OnSignB2eMemberStatusChanged'
+      'OnAppUninstall'
     ]);
+    expect(bitrix.ensureRestAppUriPlacement).toHaveBeenCalled();
   });
 });

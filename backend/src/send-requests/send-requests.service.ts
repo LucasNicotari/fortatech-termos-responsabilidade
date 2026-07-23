@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ArchiveStatus,
   Prisma,
@@ -8,13 +9,13 @@ import {
   SignatureProvider,
   SignatureStatus
 } from '@prisma/client';
+import { createHash, randomBytes } from 'crypto';
 import { BitrixService } from '../bitrix/bitrix.service';
 import { DocumentsService } from '../documents/documents.service';
 import { LogsService } from '../logs/logs.service';
 import { TermNotificationsService } from '../notifications/term-notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
-import { BitrixSignatureService } from '../signature-providers/bitrix-signature.service';
 import { ZapSignService } from '../signature-providers/zapsign.service';
 import { CreateSendRequestDto, UpdateSendRequestDto } from './dto/create-send-request.dto';
 
@@ -27,8 +28,8 @@ export class SendRequestsService {
     private readonly storage: StorageService,
     private readonly logs: LogsService,
     private readonly zapSign: ZapSignService,
-    private readonly bitrixSignature: BitrixSignatureService,
-    private readonly notifications: TermNotificationsService
+    private readonly notifications: TermNotificationsService,
+    private readonly config: ConfigService
   ) {}
 
   findAll() {
@@ -39,7 +40,8 @@ export class SendRequestsService {
         equipment: { orderBy: { itemNumber: 'asc' } },
         templateVersion: { include: { template: true } },
         attempts: { orderBy: { attemptNumber: 'desc' }, take: 1 },
-        signatures: { orderBy: { createdAt: 'desc' }, take: 1 }
+        signatures: { orderBy: { createdAt: 'desc' }, take: 1 },
+        notificationRecipients: { orderBy: { name: 'asc' } }
       }
     });
   }
@@ -80,6 +82,9 @@ export class SendRequestsService {
     const templateVersion = dto.templateVersionId
       ? await this.findTemplateVersion(dto.templateVersionId)
       : await this.findDefaultTemplateVersion();
+    const notificationRecipients = await this.resolveNotificationRecipients(
+      dto.notificationRecipientBitrixUserIds || []
+    );
     const request = await this.prisma.sendRequest.create({
       data: {
         employeeId: employee.id,
@@ -98,13 +103,19 @@ export class SendRequestsService {
             assetTag: item.assetTag,
             accessories: item.accessories
           }))
-        }
+        },
+        notificationRecipients: { create: notificationRecipients }
       }
     });
     return this.prisma.sendRequest.update({
       where: { id: request.id },
       data: { documentFileName: responsibilityTermFileName(dto.employeeName) },
-      include: { employee: true, equipment: true, templateVersion: { include: { template: true } } }
+      include: {
+        employee: true,
+        equipment: true,
+        notificationRecipients: true,
+        templateVersion: { include: { template: true } }
+      }
     });
   }
 
@@ -115,6 +126,9 @@ export class SendRequestsService {
     }
     const email = dto.employeeEmail.trim().toLowerCase();
     const cpf = dto.cpf.trim();
+    const notificationRecipients = await this.resolveNotificationRecipients(
+      dto.notificationRecipientBitrixUserIds || []
+    );
     const [byEmail, byCpf] = await Promise.all([
       this.prisma.employee.findUnique({ where: { email } }),
       this.prisma.employee.findUnique({ where: { cpf } })
@@ -134,6 +148,7 @@ export class SendRequestsService {
         }
       }),
       this.prisma.sendRequestEquipment.deleteMany({ where: { sendRequestId: id } }),
+      this.prisma.sendRequestNotificationRecipient.deleteMany({ where: { sendRequestId: id } }),
       this.prisma.sendRequest.update({
         where: { id },
         data: {
@@ -148,7 +163,8 @@ export class SendRequestsService {
               itemNumber: index + 1, quantity: item.quantity, description: item.description,
               serialNumber: item.serialNumber, assetTag: item.assetTag, accessories: item.accessories
             }))
-          }
+          },
+          notificationRecipients: { create: notificationRecipients }
         }
       })
     ]);
@@ -217,62 +233,70 @@ export class SendRequestsService {
       if (this.zapSign.isLocalMode()) {
         return this.sendLocalSimulation(request, attempt.id, pdf, snapshot);
       }
-      const settings = await this.bitrixSignature.requireSettings();
       const signerUserId = Number(request.employee.bitrixId);
       if (!Number.isInteger(signerUserId) || signerUserId <= 0) {
         throw new BadRequestException('O colaborador precisa estar vinculado a um usuário do Bitrix24');
       }
-      const requestedByBitrixId = Number(request.requestedBy?.bitrixUserId);
-      const responsibleUserId = Number.isInteger(requestedByBitrixId) && requestedByBitrixId > 0
-        ? requestedByBitrixId
-        : settings.representativeUserId;
-      const result = await this.bitrix.sendDocument({
-        companyCrmId: settings.companyCrmId,
-        signerUserId,
-        representativeUserId: settings.representativeUserId,
-        responsibleUserId,
-        companyProviderUid: settings.providerUid,
-        fileName: request.documentFileName,
-        pdf,
-        regionDocumentType: settings.regionDocumentType,
-        externalId: id,
-        externalDateCreate: request.requestedAt
+      const publicUrl = this.config.get<string>('PUBLIC_BACKEND_URL');
+      const clientId = this.config.get<string>('BITRIX_CLIENT_ID');
+      const installation = await this.prisma.bitrixInstallation.findFirst({
+        where: { active: true },
+        orderBy: { updatedAt: 'desc' }
       });
-      const signer = result.members?.find((member) => member.role === 'signer');
-      const assignee = result.members?.find((member) => member.role === 'assignee');
+      if (!publicUrl || !clientId || !installation) {
+        throw new BadRequestException('Integracao Bitrix24 incompleta para envio pelo chat');
+      }
+      await this.bitrix.ensureRestAppUriPlacement(
+        `${publicUrl.replace(/\/$/, '')}/integrations/bitrix/launch`
+      );
+      const signingToken = randomBytes(32).toString('base64url');
       const signature = await this.prisma.signature.create({
         data: {
           sendRequestId: id,
           employeeId: request.employeeId,
           templateVersionId: request.templateVersionId,
-          provider: SignatureProvider.BITRIX,
-          providerDocumentId: result.uid,
-          bitrixDocumentUid: result.uid,
-          signerMemberUid: signer?.uid,
-          assigneeMemberUid: assignee?.uid,
+          provider: SignatureProvider.FORTADOCS,
           status: SignatureStatus.SENT,
-          rawStatusCode: result.state?.code || 'sent',
-          bitrixStage: result.state?.name || 'Aguardando assinatura do representante',
+          rawStatusCode: 'chat-sent',
+          bitrixStage: 'Aguardando assinatura do colaborador no FortaDocs',
           sentAt: new Date(),
           lastSyncedAt: new Date(),
-          archiveStatus: ArchiveStatus.NOT_REQUIRED
-        }
+          archiveStatus: ArchiveStatus.NOT_REQUIRED,
+          invitation: {
+            create: {
+              tokenHash: createHash('sha256').update(signingToken).digest('hex'),
+              bitrixUserId: String(signerUserId),
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60_000)
+            }
+          }
+        },
+        include: { invitation: true }
+      });
+      const signingUrl = `https://${installation.domain}/marketplace/view/${encodeURIComponent(clientId)}/?params[signing]=${encodeURIComponent(signingToken)}`;
+      let chatMessageId: number;
+      try {
+        chatMessageId = await this.bitrix.sendChatMessage(
+          signerUserId,
+          `[B]Termo de Responsabilidade para assinatura[/B]\n`
+          + `Olá, ${request.employee.nome}. Revise o documento e registre sua assinatura dentro do Bitrix24.\n\n`
+          + `[URL=${signingUrl}]Abrir e assinar no FortaDocs[/URL]\n\n`
+          + `O convite é pessoal e expira em 7 dias.`
+        );
+      } catch (error) {
+        await this.prisma.signature.delete({ where: { id: signature.id } });
+        throw error;
+      }
+      await this.prisma.signingInvitation.update({
+        where: { id: signature.invitation!.id },
+        data: { chatMessageId: String(chatMessageId) }
       });
       await this.prisma.signatureEvent.create({
         data: {
           signatureId: signature.id,
-          eventType: 'BITRIX_SENT',
+          eventType: 'FORTADOCS_CHAT_SENT',
           status: SignatureStatus.SENT,
-          bitrixStage: result.state?.code || 'sent',
-          payload: this.toJson({
-            uid: result.uid,
-            state: result.state,
-            members: result.members?.map((member) => ({
-              uid: member.uid,
-              role: member.role,
-              state: member.state
-            }))
-          })
+          bitrixStage: 'Aguardando assinatura do colaborador no FortaDocs',
+          payload: { bitrixUserId: signerUserId, chatMessageId, expiresInDays: 7 }
         }
       });
       await this.prisma.sendAttempt.update({
@@ -281,16 +305,16 @@ export class SendRequestsService {
           status: SendAttemptStatus.SUCCESS,
           finishedAt: new Date(),
           providerResponse: this.toJson({
-            provider: 'BITRIX',
-            documentUid: result.uid,
-            status: result.state?.code
+            provider: 'FORTADOCS',
+            chatMessageId,
+            status: 'SENT'
           })
         }
       });
       const updatedRequest = await this.prisma.sendRequest.update({
         where: { id },
         data: { status: SendRequestStatus.SENT, sentAt: new Date(), lockedAt: new Date() },
-        include: { employee: true, equipment: true, signatures: true }
+        include: { employee: true, equipment: true, signatures: true, notificationRecipients: true }
       });
       await this.notifications.notifySent(signature.id, id, request.employee.nome);
       return updatedRequest;
@@ -366,6 +390,16 @@ export class SendRequestsService {
     });
   }
 
+  private async resolveNotificationRecipients(ids: number[]) {
+    const uniqueIds = [...new Set(ids)];
+    const users = await Promise.all(uniqueIds.map((id) => this.bitrix.getUser(id)));
+    return users.map((user) => ({
+      bitrixUserId: String(user.ID),
+      name: [user.NAME, user.LAST_NAME].filter(Boolean).join(' ').trim() || `Usuario ${user.ID}`,
+      email: user.EMAIL?.trim().toLowerCase() || null
+    }));
+  }
+
   async retry(id: string) {
     const request = await this.prisma.sendRequest.findUnique({ where: { id } });
     if (!request) throw new NotFoundException('Solicitacao de envio nao encontrada');
@@ -378,7 +412,13 @@ export class SendRequestsService {
   async findOne(id: string) {
     const request = await this.prisma.sendRequest.findUnique({
       where: { id },
-      include: { employee: true, equipment: { orderBy: { itemNumber: 'asc' } }, templateVersion: { include: { template: true } }, signatures: true }
+      include: {
+        employee: true,
+        equipment: { orderBy: { itemNumber: 'asc' } },
+        notificationRecipients: { orderBy: { name: 'asc' } },
+        templateVersion: { include: { template: true } },
+        signatures: true
+      }
     });
     if (!request) throw new NotFoundException('Solicitacao de envio nao encontrada');
     return request;
@@ -387,7 +427,12 @@ export class SendRequestsService {
   private async getEditable(id: string) {
     const request = await this.prisma.sendRequest.findUnique({
       where: { id },
-      include: { employee: true, equipment: { orderBy: { itemNumber: 'asc' } }, templateVersion: true }
+      include: {
+        employee: true,
+        equipment: { orderBy: { itemNumber: 'asc' } },
+        notificationRecipients: true,
+        templateVersion: true
+      }
     });
     if (!request) throw new NotFoundException('Solicitacao de envio nao encontrada');
     const editableStatuses: SendRequestStatus[] = [SendRequestStatus.DRAFT, SendRequestStatus.READY, SendRequestStatus.FAILED];

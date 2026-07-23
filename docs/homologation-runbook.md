@@ -1,160 +1,140 @@
-# Runbook de homologação e implantação
+# Runbook de homologacao e implantacao
 
-Este procedimento publica o ambiente de testes permanente e o conecta ao aplicativo local do portal `fortaeqt.bitrix24.com.br`. Não use dados de colaboradores reais, exceto o endereço autorizado para o teste controlado. O CPF, os patrimônios e o conteúdo do teste devem ser sintéticos.
+Este procedimento conecta o FortaDocs ao portal `fortaeqt.bitrix24.com.br`. Use CPF e equipamentos
+sinteticos durante a homologacao.
 
-## 1. Portão técnico local
+## 1. Verificacoes locais
 
 ```powershell
-docker info
 npm.cmd run test:local
-
-Set-Location backend
+cd backend
+npm.cmd run lint
 npm.cmd test -- --runInBand
+npm.cmd run build
+cd ..\frontend
 npm.cmd run lint
 npm.cmd run build
-
-Set-Location ..\frontend
-npm.cmd run lint
-npm.cmd run build
-
-Set-Location ..
-git diff --check
-powershell -ExecutionPolicy Bypass -File scripts/check-homologation.ps1 -Mode local
 ```
 
-Critérios: testes sem falhas, backend e frontend compilados, PDF sintético assinado e arquivado, `.env` ignorado e template marcado como homologação.
+## 2. Banco e Storage
 
-## 2. Supabase HML
+No backend:
 
-O Render precisa receber, como segredos e sem aspas adicionais:
+```powershell
+npm.cmd run prisma:deploy
+npx.cmd prisma migrate status
+```
+
+Nao use `prisma migrate reset`. Confirme:
+
+- migration `20260723170000_internal_bitrix_signing` aplicada;
+- RLS nas duas tabelas novas;
+- nenhum `GRANT` de tabela para `anon` ou `authenticated`;
+- bucket `responsibility-terms` privado;
+- limite de 20 MB e MIME de PDF/DOCX.
+
+## 3. Render
+
+Backend: `https://fortatech-termos-api-hml.onrender.com`
+
+Frontend: `https://fortatech-termos-web-hml.onrender.com`
+
+Variaveis obrigatorias do backend:
 
 ```text
 DATABASE_URL
 DIRECT_URL
 SUPABASE_URL
 SUPABASE_SECRET_KEY
-```
-
-O entrypoint do backend aplica migrations sem reset e executa o seed idempotente. Depois do deploy, confirme:
-
-- `prisma migrate status` sem pendências;
-- 16 tabelas `app_*` com RLS;
-- bucket privado `responsibility-terms`, 20 MB, PDF/DOCX;
-- nenhum DML de `anon` ou `authenticated`;
-- advisors do Supabase sem alerta crítico relacionado às tabelas da aplicação.
-
-## 3. Render HML
-
-O Blueprint `render.yaml` mantém:
-
-```text
-Backend:  https://fortatech-termos-api-hml.onrender.com
-Frontend: https://fortatech-termos-web-hml.onrender.com
-Health:   https://fortatech-termos-api-hml.onrender.com/health
-```
-
-Segredos obrigatórios do backend:
-
-```text
-DATABASE_URL
-DIRECT_URL
-SUPABASE_URL
-SUPABASE_SECRET_KEY
+JWT_SECRET
+BITRIX_TOKEN_ENCRYPTION_KEY
 BITRIX_CLIENT_ID
 BITRIX_CLIENT_SECRET
+BITRIX_PORTAL_ORIGIN
+PUBLIC_BACKEND_URL
+FRONTEND_URL
+CORS_ORIGINS
+RESPONSIBILITY_TEMPLATE_PATH
 ```
 
-O Blueprint gera `JWT_SECRET` e `BITRIX_TOKEN_ENCRYPTION_KEY`. Em serviço já criado, uma nova variável marcada como `sync: false` precisa ser preenchida manualmente no painel do Render; o Blueprint não inventa nem copia o segredo.
+Os valores ficam no painel, nunca no Git ou em capturas de tela.
 
-O plano gratuito é adequado apenas para homologação: o backend suspende após inatividade e pode levar cerca de um minuto para acordar. Antes de produção, altere o serviço para uma instância sempre ativa. Não use um monitor artificial para contornar os limites do plano.
+## 4. Aplicativo local Bitrix24
 
-## 4. Aplicativo local Bitrix24 definitivo
-
-No Bitrix24, abra **Aplicativos > Recursos para desenvolvedores > Outros > Aplicativo local** e mantenha o tipo **Servidor**.
+Tipo: **Servidor**.
 
 ```text
 Seu caminho do manipulador:
 https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/launch
 
-Caminho de instalação inicial:
+Caminho de instalacao inicial:
 https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/install
 ```
 
-Permissões necessárias para o fluxo atual:
+Escopos:
 
 ```text
+basic
+user
 user_basic
 department
 im
-crm
-sign.b2e
+placement
 ```
 
-- `user_basic`: identidade, perfil básico e e-mail dos colaboradores, sem permissão para alterá-los;
-- `department`: converte `UF_DEPARTMENT` no nome do departamento;
-- `im`: envia notificações pessoais aos usuários selecionados.
-- `crm`: identifica a empresa que envia o documento;
-- `sign.b2e`: cria, consulta e acompanha a assinatura nativa.
+Depois de incluir `placement`, clique em **Salvar** e **Reinstalar**. A reinstalacao e obrigatoria
+porque o token OAuth anterior nao ganha novos escopos automaticamente.
 
-O instalador registra eventos de ciclo de vida e os eventos `OnSignB2eDocumentStatusChanged` e `OnSignB2eMemberStatusChanged`. A tela de configuração também tenta registrar os dois eventos B2E ausentes, portanto não é necessário reinstalar o aplicativo apenas para renovar os handlers quando o token já possui os escopos corretos.
+O backend registra `OnAppInstall`, `OnAppUninstall` e o manipulador `REST_APP_URI`.
 
-Referências oficiais: [`user.get`](https://apidocs.bitrix24.com/api-reference/user/user-get.html),
-[`department.get`](https://apidocs.bitrix24.com/api-reference/departments/department-get.html) e
-[`im.notify.personal.add`](https://apidocs.bitrix24.com/api-reference/chats/notifications/im-notify-personal-add.html),
-[`sign.b2e.document.send`](https://apidocs.bitrix24.com/api-reference/sign/sign-b2e-document-send.html) e
-[`sign.b2e.company.provider.list`](https://apidocs.bitrix24.com/api-reference/sign/sign-b2e-company-provider-list.html).
+## 5. Teste controlado
 
-Procedimento:
+Destino autorizado: `lucas.nicotari@fortatech.com.br`.
 
-1. confira se `BITRIX_CLIENT_ID` e `BITRIX_CLIENT_SECRET` do aplicativo estão no Render;
-2. salve as duas URLs permanentes e as permissões;
-3. clique em **Reinstalar**;
-4. aguarde a página concluir com `BX24.installFinish()`;
-5. clique em **Abrir aplicativo** pelo Bitrix24;
-6. confirme que o Dashboard carrega e que acesso direto à URL não concede sessão.
+1. Abra o FortaDocs pelo menu do Bitrix24 como operador.
+2. Selecione Lucas como colaborador.
+3. Use CPF sintetico e ao menos dois equipamentos `HML-TESTE`.
+4. Escolha livremente as pessoas notificadas.
+5. Gere a previa e confira todas as paginas.
+6. Clique em **Enviar pelo chat** uma unica vez.
+7. Confira a mensagem no chat pessoal de Lucas.
+8. Clique no link e confirme que a tela abre dentro do Bitrix24.
+9. Teste uma forma de assinatura: digitar, desenhar ou importar imagem.
+10. Marque a confirmacao de leitura e finalize.
+11. Confira o estado `FINISHED` no painel Termos.
+12. Baixe o PDF final e confira a assinatura incorporada.
+13. Confirme que todos os selecionados receberam notificacao de conclusao.
+14. Confirme `ARCHIVED`, tamanho e SHA-256 no banco.
 
-A instalação precisa ser feita pela sessão administrativa do portal; ela não pode ser automatizada pelo servidor porque é o Bitrix24 que emite e entrega o OAuth inicial.
+## 6. Testes negativos
 
-## 5. Assinatura Bitrix24
+- encaminhar o link a outro usuario deve negar acesso;
+- abrir um token alterado deve negar acesso;
+- repetir o mesmo codigo de abertura deve falhar;
+- concluir duas vezes nao deve criar dois PDFs;
+- imagem acima de 1 MB ou arquivo nao PNG/JPG deve ser recusado;
+- sessao do signatario nao deve acessar APIs administrativas;
+- acesso direto ao frontend sem abertura Bitrix24 nao deve criar sessao.
 
-1. abra **Configurações > Usuários e acessos**;
-2. em **Assinatura Bitrix24**, selecione o representante formalmente autorizado;
-3. confirme a empresa `FORTA TECH · CRM 67539`;
-4. confira se o provedor foi localizado;
-5. clique em **Salvar**.
-
-Se o provedor não aparecer, confira se o instalador possui permissão para criar documentos B2E e se os escopos `crm` e `sign.b2e` foram concedidos. Alterar escopos exige salvar e reinstalar o aplicativo local para o Bitrix24 emitir um novo OAuth.
-
-## 6. Teste final autorizado
-
-Destino: `lucas.nicotari@fortatech.com.br`.
-
-1. abra o FortaDocs pelo menu do Bitrix24 com Lucas ou Osmar;
-2. escolha o usuário Bitrix de Lucas e confirme o e-mail acima;
-3. use CPF sintético válido e claramente registre patrimônios como `HML-TESTE`;
-4. inclua ao menos dois equipamentos fictícios;
-5. gere a prévia e confirme os títulos centralizados, nome, CPF e itens;
-6. envie uma única vez;
-7. confirme que o representante recebeu a mensagem do HR bot;
-8. o representante revisa o documento e confirma a assinatura no aplicativo móvel do Bitrix24;
-9. confirme que a solicitação foi liberada ao colaborador e conclua a assinatura de teste no Bitrix24;
-10. confirme o estado concluído no FortaDocs;
-11. valide que notificados receberam aviso no Bitrix24;
-12. confira `ARCHIVED`, tamanho, caminho privado e SHA-256 do PDF final;
-13. confira que reentrega do evento não cria duplicação.
-
-## 7. Evidências de liberação
+## 7. Evidencias de liberacao
 
 - commit e deploy identificados;
-- `/health` em 200;
-- migrations sem pendência;
-- instalação Bitrix ativa no Supabase;
-- empresa, provedor e representante Bitrix24 configurados;
-- ID do termo de teste e horários de envio/assinatura;
-- assinaturas do representante e do colaborador concluídas no Bitrix24;
-- PDF final privado e hash correspondente;
-- logs sem CPF, chaves ou conteúdo do documento.
+- `/health` e frontend em HTTP 200;
+- sete migrations aplicadas;
+- 51 testes automatizados aprovados;
+- lint e builds aprovados;
+- escopos `im` e `placement` validados;
+- envio ao chat e abertura `REST_APP_URI` comprovados;
+- PDF final privado, assinado e com hashes;
+- notificacoes por termo comprovadas.
 
-## 8. Produção
+## 8. Producao
 
-Produção exige projeto Supabase separado, serviço Render sempre ativo, aplicativo Bitrix separado, credenciais novas, domínio próprio, template juridicamente aprovado e sem a marca de homologação, retenção/backup definidos e teste controlado adicional.
+Antes de liberar dados reais:
+
+- trocar o backend gratuito por instancia que nao suspenda;
+- criar Supabase, Render e aplicativo Bitrix separados;
+- usar segredos novos;
+- aprovar juridicamente o termo;
+- documentar retencao, backup, restauracao e resposta a incidente;
+- executar novamente este roteiro com grupo controlado.

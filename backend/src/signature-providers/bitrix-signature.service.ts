@@ -81,6 +81,34 @@ export class BitrixSignatureService {
     }
   }
 
+  async internalStatus() {
+    if (this.localMode) {
+      return {
+        provider: 'bitrix' as const,
+        environment: 'local' as const,
+        configured: true,
+        local: true,
+        providerName: 'Assinatura interna FortaDocs',
+        portalUrl: 'http://localhost:5173'
+      };
+    }
+    const installation = await this.prisma.bitrixInstallation.findFirst({
+      where: { active: true },
+      orderBy: { updatedAt: 'desc' },
+      select: { domain: true, scope: true }
+    });
+    return {
+      provider: 'bitrix' as const,
+      environment: 'production' as const,
+      configured: Boolean(installation),
+      reason: !installation
+        ? 'O aplicativo ainda nao esta instalado no Bitrix24.'
+        : undefined,
+      providerName: 'Assinatura interna FortaDocs',
+      portalUrl: installation ? `https://${installation.domain}` : undefined
+    };
+  }
+
   async options() {
     const settings = await this.getSettings();
     const companyCrmId = settings?.companyCrmId || this.defaultCompanyCrmId();
