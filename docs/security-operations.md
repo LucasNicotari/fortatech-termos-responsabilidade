@@ -15,6 +15,8 @@
 - Imagem da assinatura normalizada para PNG e limitada a 1 MB no backend.
 - Conclusao atomica e protecao contra assinatura duplicada.
 - PDF final e imagem registrados por SHA-256.
+- Conclusao condicionada a confirmacao do arquivo no Drive do Bitrix24.
+- Conteudo Base64 do PDF removido dos logs de integracao com o Drive.
 - Eventos de notificacao idempotentes por termo, estado e usuario.
 - CPF, tokens, documento e URL de assinatura ausentes dos logs tecnicos.
 
@@ -23,7 +25,7 @@
 - `/health` do backend e disponibilidade do frontend;
 - falhas `SEND_REQUEST_ERROR`, `BITRIX_ERROR` e `BITRIX_TERM_NOTIFICATION_ERROR`;
 - convites expirados sem conclusao;
-- assinaturas concluidas com `archive_status` diferente de `ARCHIVED`;
+- assinaturas `SIGNED` com `archive_status=FAILED` ou `PENDING`;
 - expiracao e renovacao do OAuth Bitrix;
 - consumo e suspensao da instancia Render;
 - Security e Performance Advisors depois de migrations.

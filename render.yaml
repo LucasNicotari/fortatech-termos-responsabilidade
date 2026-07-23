@@ -38,6 +38,10 @@ services:
         value: "7718,8137"
       - key: BITRIX_SIGN_COMPANY_CRM_ID
         value: "67539"
+      - key: BITRIX_DRIVE_OWNER_USER_ID
+        value: "8465"
+      - key: BITRIX_DRIVE_FOLDER_NAME
+        value: "Termo de Responsabilidade"
       - key: PUBLIC_BACKEND_URL
         value: https://fortatech-termos-api-hml.onrender.com
       - key: FRONTEND_URL

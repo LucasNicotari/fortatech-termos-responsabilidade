@@ -1,4 +1,4 @@
-import { SignatureStatus } from '@prisma/client';
+import { SendRequestStatus, SignatureStatus } from '@prisma/client';
 import { PDFDocument } from 'pdf-lib';
 import {
   findCenteredSignatureLineY,
@@ -9,6 +9,9 @@ import {
 describe('SignaturesService status mapping', () => {
   const service = new SignaturesService({} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
   const normalize = (value: string) => (service as unknown as { normalizeStatus: (status: string) => SignatureStatus }).normalizeStatus(value);
+  const requestStatus = (value: SignatureStatus) => (service as unknown as {
+    toRequestStatus: (status: SignatureStatus) => SendRequestStatus;
+  }).toRequestStatus(value);
 
   it.each([
     ['signing', SignatureStatus.IN_PROGRESS],
@@ -17,6 +20,15 @@ describe('SignaturesService status mapping', () => {
     ['refused', SignatureStatus.DECLINED],
     ['cancelled', SignatureStatus.CANCELED]
   ])('maps %s to %s', (raw, expected) => expect(normalize(raw)).toBe(expected));
+
+  it.each([
+    [SignatureStatus.SENT, SendRequestStatus.SENT],
+    [SignatureStatus.VIEWED, SendRequestStatus.VIEWED],
+    [SignatureStatus.SIGNED, SendRequestStatus.SIGNED],
+    [SignatureStatus.FINISHED, SendRequestStatus.COMPLETED]
+  ])('keeps request lifecycle aligned from %s to %s', (signature, request) => {
+    expect(requestStatus(signature)).toBe(request);
+  });
 
   it('aplica uma assinatura PNG desenhada ao PDF local', async () => {
     const document = await PDFDocument.create();

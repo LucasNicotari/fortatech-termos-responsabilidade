@@ -148,10 +148,11 @@ export function Signatures() {
                         <div className="grid gap-3 text-xs text-steel sm:grid-cols-3">
                           <Detail label="Criado" value={formatDate(request.createdAt)} />
                           <Detail label="Enviado" value={formatDate(signature?.sentAt || request.sentAt)} />
+                          <Detail label="Visualizado" value={formatDate(signature?.viewedAt)} />
                           <Detail label="Assinado" value={formatDate(signature?.signedAt)} />
                           <Detail label="Template" value={request.templateVersion ? `${request.templateVersion.template.nome} · v${request.templateVersion.versao}` : '-'} />
                           <Detail label="Provedor" value={signature ? (localMode ? 'Simulação local' : signature.provider === 'ZAPSIGN' ? 'ZapSign' : 'Bitrix24') : 'Ainda não enviado'} />
-                          <Detail label="Backup" value={archiveLabel(signature)} error={signature?.archiveStatus === 'FAILED'} />
+                          <Detail label="Arquivamento" value={archiveLabel(signature)} error={signature?.archiveStatus === 'FAILED'} />
                         </div>
                         {signature && <SignatureActions signature={signature} localMode={localMode} onSync={() => refresh.mutate(signature.id)} onRetry={() => retry.mutate(signature.id)} onRetryArchive={() => retryArchive.mutate(signature.id)} onDownload={() => download(signature.id)} />}
                       </div>
@@ -186,7 +187,7 @@ function SignatureActions({ signature, localMode, onSync, onRetry, onRetryArchiv
       {localMode && signature.providerDocumentId && !finished && <a href={`/assinar/${encodeURIComponent(signature.providerDocumentId)}`} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-blue/40 bg-white px-2.5 py-2 text-xs font-medium text-b24-blue-dark hover:bg-sky-50"><ExternalLink size={14} /> Abrir assinatura</a>}
       {!finished && <button onClick={onSync} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-white px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RefreshCw size={14} /> Atualizar</button>}
       {retryable && <button onClick={onRetry} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-white px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RotateCcw size={14} /> Tentar novamente</button>}
-      {signature.archiveStatus === 'FAILED' && <button onClick={onRetryArchive} className="focus-ring inline-flex items-center gap-1.5 rounded border border-red-200 bg-white px-2.5 py-2 text-xs font-medium text-coral hover:bg-red-50"><RotateCcw size={14} /> Refazer backup</button>}
+      {signature.status === 'SIGNED' && ['PENDING', 'FAILED'].includes(signature.archiveStatus || '') && <button onClick={onRetryArchive} className="focus-ring inline-flex items-center gap-1.5 rounded border border-red-200 bg-white px-2.5 py-2 text-xs font-medium text-coral hover:bg-red-50"><RotateCcw size={14} /> Salvar no Drive</button>}
       {signature.archiveStatus === 'ARCHIVED' && <button onClick={onDownload} className="focus-ring inline-flex items-center gap-1.5 rounded bg-b24-blue px-2.5 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><Download size={14} /> Baixar PDF</button>}
     </div>
   );
@@ -198,16 +199,23 @@ function Detail({ label, value, error = false }: { label: string; value: string;
 
 function archiveLabel(signature?: Signature) {
   if (!signature) return '-';
-  const labels: Record<string, string> = { NOT_REQUIRED: 'Aguardando conclusão', PENDING: 'Arquivando', ARCHIVED: 'PDF arquivado', FAILED: 'Falha no backup' };
+  const labels: Record<string, string> = {
+    NOT_REQUIRED: 'Aguardando assinatura',
+    PENDING: 'Salvando no Drive',
+    ARCHIVED: signature.provider === 'FORTADOCS' ? 'Drive do Bitrix24' : 'PDF arquivado',
+    FAILED: signature.provider === 'FORTADOCS' ? 'Falha no Drive' : 'Falha no backup'
+  };
   return labels[signature.archiveStatus || 'NOT_REQUIRED'] || signature.archiveStatus || '-';
 }
 
 function matchesFilter(request: SendRequest, filter: TermFilter) {
   const signatureStatus = request.signatures?.[0]?.status;
   if (filter === 'DRAFT') return ['DRAFT', 'READY'].includes(request.status);
-  if (filter === 'WAITING') return Boolean(signatureStatus && ['PENDING', 'SENT', 'VIEWED', 'IN_PROGRESS'].includes(signatureStatus)) || ['PENDING', 'SENDING', 'SENT', 'IN_PROGRESS'].includes(request.status);
-  if (filter === 'COMPLETED') return request.status === 'COMPLETED' || Boolean(signatureStatus && ['SIGNED', 'FINISHED'].includes(signatureStatus));
-  if (filter === 'ATTENTION') return ['FAILED', 'CANCELED'].includes(request.status) || Boolean(signatureStatus && ['DECLINED', 'ERROR', 'CANCELED'].includes(signatureStatus));
+  if (filter === 'WAITING') return Boolean(signatureStatus && ['PENDING', 'SENT', 'VIEWED', 'IN_PROGRESS'].includes(signatureStatus)) || ['PENDING', 'SENDING', 'SENT', 'VIEWED', 'IN_PROGRESS'].includes(request.status);
+  if (filter === 'COMPLETED') return request.status === 'COMPLETED' || signatureStatus === 'FINISHED';
+  if (filter === 'ATTENTION') return ['FAILED', 'CANCELED'].includes(request.status)
+    || request.signatures?.[0]?.archiveStatus === 'FAILED'
+    || Boolean(signatureStatus && ['DECLINED', 'ERROR', 'CANCELED'].includes(signatureStatus));
   return true;
 }
 

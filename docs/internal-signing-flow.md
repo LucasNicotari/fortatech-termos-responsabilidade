@@ -10,6 +10,7 @@ sequenceDiagram
     participant API as API FortaDocs
     participant DB as PostgreSQL / Supabase
     participant Storage as Storage privado
+    participant Drive as Drive Bitrix24
     participant Chat as Chat Bitrix24
     actor Colaborador
     participant Sign as Tela de assinatura
@@ -36,6 +37,7 @@ sequenceDiagram
     API->>Chat: user.current
     Chat-->>API: ID do usuario conectado
     API->>DB: Confere token, prazo, usuario e documento
+    API->>DB: Marca VIEWED na primeira abertura autenticada
     API-->>Sign: Codigo de abertura de uso unico
     Sign->>API: Troca codigo por sessao SIGN_DOCUMENT
     API-->>Sign: PDF temporario e dados minimos
@@ -45,10 +47,12 @@ sequenceDiagram
     API->>Storage: Le PDF original
     API->>API: Incorpora assinatura e calcula hashes
     API->>Storage: Grava PDF assinado
-    API->>DB: Conclui convite, assinatura e auditoria
-    API->>DB: Marca a solicitacao como COMPLETED
+    API->>DB: Conclui convite e marca SIGNED
     API->>Chat: Notifica todas as pessoas selecionadas
     API->>Chat: Notifica automaticamente quem criou o termo
+    API->>Drive: Salva PDF em /Termo de Responsabilidade
+    Drive-->>API: ID do arquivo e da pasta
+    API->>DB: Marca FINISHED / COMPLETED
     API-->>Sign: Confirmacao e link temporario do PDF final
 ```
 
@@ -84,11 +88,27 @@ stateDiagram-v2
     READY --> SENDING: operador confirma
     SENDING --> SENT: mensagem enviada ao chat
     SENT --> VIEWED: colaborador abre no Bitrix24
-    VIEWED --> FINISHED: assinatura concluida
+    VIEWED --> SIGNED: assinatura incorporada ao PDF
+    SIGNED --> FINISHED: PDF confirmado no Drive
+    SIGNED --> SIGNED: falha no Drive; permite nova tentativa
     SENDING --> FAILED: falha de API ou permissao
     READY --> DRAFT: documento alterado
-    FINISHED --> [*]
+    FINISHED --> [*]: concluido
 ```
+
+## Significado operacional dos status
+
+| Status exibido | Condicao registrada |
+|---|---|
+| Enviado | A mensagem do convite foi aceita pelo chat do Bitrix24 |
+| Visualizado | O colaborador abriu o convite dentro do Bitrix24 e teve sua identidade confirmada |
+| Assinado | A assinatura foi incorporada ao PDF, o SHA-256 foi salvo e o convite foi encerrado |
+| Concluido | O Bitrix24 confirmou o PDF na pasta `Termo de Responsabilidade` do Drive do usuario `8465` |
+
+Falhas de envio usam `FAILED`. Recusa usa `DECLINED`, cancelamento ou expiracao usa `CANCELED`
+e falha de processamento usa `ERROR`. Uma falha exclusiva do Drive nao desfaz a assinatura:
+o termo continua `SIGNED`, recebe `archive_status=FAILED` e pode ser arquivado novamente pelo
+painel administrativo.
 
 ## Controles de seguranca
 

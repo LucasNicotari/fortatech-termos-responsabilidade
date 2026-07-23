@@ -1,5 +1,5 @@
 export type SignatureStatus = 'PENDING' | 'SENT' | 'VIEWED' | 'IN_PROGRESS' | 'SIGNED' | 'FINISHED' | 'DECLINED' | 'ERROR' | 'CANCELED';
-export type SendRequestStatus = 'DRAFT' | 'READY' | 'PENDING' | 'SENDING' | 'SENT' | 'IN_PROGRESS' | 'COMPLETED' | 'DECLINED' | 'FAILED' | 'CANCELED';
+export type SendRequestStatus = 'DRAFT' | 'READY' | 'PENDING' | 'SCHEDULED' | 'SENDING' | 'SENT' | 'VIEWED' | 'IN_PROGRESS' | 'SIGNED' | 'COMPLETED' | 'DECLINED' | 'FAILED' | 'CANCELED' | 'SKIPPED';
 
 export interface Employee {
   id: string;
@@ -58,9 +58,15 @@ export interface Signature {
   rawStatusCode?: string;
   archiveStatus?: 'NOT_REQUIRED' | 'PENDING' | 'ARCHIVED' | 'FAILED';
   archiveError?: string;
+  signedStoragePath?: string;
+  bitrixDriveFileId?: string;
+  bitrixDriveFolderId?: string;
+  bitrixDriveDetailUrl?: string;
   sendRequest?: SendRequest;
   sentAt?: string;
+  viewedAt?: string;
   signedAt?: string;
+  finishedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

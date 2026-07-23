@@ -35,7 +35,7 @@ export class TermNotificationsService {
     return this.notify(
       signatureId, requestId, 'SIGNED',
       `Termo de Responsabilidade assinado por ${employeeName}.`,
-      `O Termo de Responsabilidade de ${employeeName} foi assinado e concluido.`
+      `O Termo de Responsabilidade de ${employeeName} foi assinado. O FortaDocs esta finalizando o arquivamento no Drive do Bitrix24.`
     );
   }
 

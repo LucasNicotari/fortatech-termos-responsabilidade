@@ -470,7 +470,7 @@ export class SendRequestsService {
       .filter((signature) => activeStatuses.includes(signature.status))
       .map((signature) => signature.id);
     const completed = request.signatures.some((signature) =>
-      signature.status === SignatureStatus.SIGNED || signature.status === SignatureStatus.FINISHED
+      signature.status === SignatureStatus.FINISHED
     );
 
     await this.prisma.$transaction(async (transaction) => {

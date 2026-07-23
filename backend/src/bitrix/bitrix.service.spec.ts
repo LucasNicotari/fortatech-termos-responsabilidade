@@ -146,6 +146,65 @@ describe('BitrixService sign.b2e', () => {
     });
   });
 
+  it('archives the signed PDF in the configured user Drive folder', async () => {
+    const configValues: Record<string, string> = {
+      BITRIX_DRIVE_OWNER_USER_ID: '8465',
+      BITRIX_DRIVE_FOLDER_NAME: 'Termo de Responsabilidade'
+    };
+    const config = { get: (key: string) => configValues[key] };
+    const service = new BitrixService({} as never, config as never, {} as never, {} as never, {} as never);
+    const call = jest.spyOn(service, 'call')
+      .mockResolvedValueOnce([{
+        ID: '55', NAME: 'Lucas', ENTITY_TYPE: 'user', ENTITY_ID: '8465', ROOT_OBJECT_ID: '100'
+      }])
+      .mockResolvedValueOnce([{
+        ID: '200', NAME: 'Termo de Responsabilidade', STORAGE_ID: '55', TYPE: 'folder'
+      }])
+      .mockResolvedValueOnce({
+        ID: '300', NAME: 'TR.Lucas_Nicotari.pdf', STORAGE_ID: '55', TYPE: 'file',
+        PARENT_ID: '200', DETAIL_URL: 'https://company.bitrix24.com.br/disk/file/300'
+      });
+
+    const archived = await service.archiveResponsibilityTerm(
+      Buffer.from('%PDF-test'),
+      'TR.Lucas_Nicotari.pdf'
+    );
+
+    expect(call).toHaveBeenNthCalledWith(1, 'disk.storage.getlist', {
+      filter: { ENTITY_TYPE: 'user', ENTITY_ID: '8465' }
+    });
+    expect(call).toHaveBeenNthCalledWith(2, 'disk.folder.getchildren', {
+      id: 100,
+      filter: { NAME: 'Termo de Responsabilidade' }
+    });
+    expect(call).toHaveBeenNthCalledWith(3, 'disk.folder.uploadfile', {
+      id: 200,
+      data: { NAME: 'TR.Lucas_Nicotari.pdf' },
+      fileContent: ['TR.Lucas_Nicotari.pdf', Buffer.from('%PDF-test').toString('base64')],
+      generateUniqueName: true
+    });
+    expect(archived.file.ID).toBe('300');
+  });
+
+  it('redacts Drive file contents from integration logs', async () => {
+    const http = {
+      post: jest.fn().mockReturnValue(of({ status: 200, data: { result: { ID: '300' } } }))
+    };
+    const logs = { create: jest.fn().mockResolvedValue(undefined) };
+    const service = new BitrixService(http as never, {} as never, {} as never, {} as never, logs as never);
+
+    await service.callWithToken(
+      'https://company.bitrix24.com/rest/',
+      'access-token',
+      'disk.folder.uploadfile',
+      { id: 200, fileContent: ['term.pdf', 'very-sensitive-base64'] }
+    );
+
+    const logged = logs.create.mock.calls[0][0].payload;
+    expect(JSON.stringify(logged)).not.toContain('very-sensitive-base64');
+    expect(logged.fileContent).toEqual(['term.pdf', '[base64:21]']);
+  });
+
   it('coalesces concurrent OAuth refreshes and rotates both tokens', async () => {
     const expired = {
       id: 'installation-1', memberId: 'member-1', active: true,

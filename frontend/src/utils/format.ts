@@ -18,7 +18,7 @@ export function statusLabel(status?: string) {
     IN_PROGRESS: 'Em assinatura',
     COMPLETED: 'Concluído',
     SIGNED: 'Assinado',
-    FINISHED: 'Finalizado',
+    FINISHED: 'Concluído',
     DECLINED: 'Recusado',
     ERROR: 'Erro',
     CANCELED: 'Cancelado',

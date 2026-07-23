@@ -31,7 +31,9 @@ enum SendRequestStatus {
   SCHEDULED
   SENDING
   SENT
+  VIEWED
   IN_PROGRESS
+  SIGNED
   COMPLETED
   DECLINED
   FAILED
@@ -283,6 +285,9 @@ model Signature {
   signedSha256         String?                  @map("signed_sha256")
   signedFileSize       Int?                     @map("signed_file_size")
   bitrixSafeDocumentId String?                  @map("bitrix_safe_document_id")
+  bitrixDriveFileId    String?                  @unique @map("bitrix_drive_file_id")
+  bitrixDriveFolderId  String?                  @map("bitrix_drive_folder_id")
+  bitrixDriveDetailUrl String?                  @map("bitrix_drive_detail_url")
   archivedAt           DateTime?                @map("archived_at")
   invitation           SigningInvitation?
   events               SignatureEvent[]

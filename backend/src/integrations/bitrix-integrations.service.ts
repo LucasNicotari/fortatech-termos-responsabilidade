@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, UserRole, WebhookProcessingStatus } from '@prisma/client';
+import { Prisma, SendRequestStatus, SignatureStatus, UserRole, WebhookProcessingStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { BitrixService } from '../bitrix/bitrix.service';
 import { BitrixAuthPayload, BitrixUser } from '../bitrix/bitrix.types';
@@ -140,33 +140,67 @@ export class BitrixIntegrationsService {
         || invitation.signature.employee.bitrixId !== String(bitrixUser.ID)) {
         throw new ForbiddenException('Este termo nao pertence ao usuario conectado ou o convite expirou');
       }
-      await this.prisma.$transaction([
-        this.prisma.bitrixLaunchCode.create({
+      const openedAt = new Date();
+      await this.prisma.$transaction(async (transaction) => {
+        await transaction.bitrixLaunchCode.create({
           data: {
             codeHash: createHash('sha256').update(code).digest('hex'),
             signingInvitationId: invitation.id,
             expiresAt: new Date(Date.now() + 2 * 60_000)
           }
-        }),
-        this.prisma.signingInvitation.update({
-          where: { id: invitation.id },
-          data: { openedAt: invitation.openedAt || new Date() }
-        }),
-        ...(invitation.completedAt ? [] : [
-          this.prisma.signature.update({
-            where: { id: invitation.signatureId },
-            data: { status: 'VIEWED', viewedAt: invitation.signature.viewedAt || new Date(), bitrixStage: 'Aberto pelo colaborador no Bitrix24' }
-          }),
-          this.prisma.signatureEvent.create({
+        });
+        const firstOpening = await transaction.signingInvitation.updateMany({
+          where: { id: invitation.id, openedAt: null },
+          data: { openedAt }
+        });
+        if (!invitation.completedAt) {
+          const viewed = await transaction.signature.updateMany({
+            where: {
+              id: invitation.signatureId,
+              status: {
+                in: [
+                  SignatureStatus.PENDING,
+                  SignatureStatus.SENT,
+                  SignatureStatus.VIEWED,
+                  SignatureStatus.IN_PROGRESS
+                ]
+              }
+            },
             data: {
-              signatureId: invitation.signatureId,
-              eventType: 'FORTADOCS_SIGNING_OPENED',
-              status: 'VIEWED',
-              payload: { bitrixUserId: bitrixUser.ID }
+              status: SignatureStatus.VIEWED,
+              viewedAt: invitation.signature.viewedAt || openedAt,
+              bitrixStage: 'Visualizado pelo colaborador no Bitrix24'
             }
-          })
-        ])
-      ]);
+          });
+          if (invitation.signature.sendRequestId) {
+            await transaction.sendRequest.updateMany({
+              where: {
+                id: invitation.signature.sendRequestId,
+                status: {
+                  in: [
+                    SendRequestStatus.PENDING,
+                    SendRequestStatus.SENDING,
+                    SendRequestStatus.SENT,
+                    SendRequestStatus.VIEWED,
+                    SendRequestStatus.IN_PROGRESS
+                  ]
+                }
+              },
+              data: { status: SendRequestStatus.VIEWED }
+            });
+          }
+          if (firstOpening.count === 1 && viewed.count === 1) {
+            await transaction.signatureEvent.create({
+              data: {
+                signatureId: invitation.signatureId,
+                eventType: 'FORTADOCS_SIGNING_VIEWED',
+                status: SignatureStatus.VIEWED,
+                payload: { bitrixUserId: bitrixUser.ID }
+              }
+            });
+          }
+        }
+      });
       return {
         code,
         frontendUrl: `${(this.config.get<string>('FRONTEND_URL') || 'http://localhost:5173').replace(/\/$/, '')}/sign`

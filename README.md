@@ -8,11 +8,12 @@ Aplicativo interno da Forta Tech, incorporado ao Bitrix24, para preparar, revisa
 2. Seleciona um colaborador ativo; nome, e-mail, cargo, departamento e foto vêm do perfil do Bitrix24.
 3. Confere os dados, informa o CPF e registra os equipamentos entregues.
 4. O backend preenche o DOCX, converte-o para PDF e disponibiliza uma prévia privada por cinco minutos.
-5. Depois da revisão, o backend cria a solicitação no e-Signature for HR do Bitrix24.
-6. O representante autorizado da empresa revisa, envia e confirma a assinatura no aplicativo móvel do Bitrix24.
-7. O Bitrix24 libera o documento ao colaborador, que assina dentro do fluxo nativo.
-8. Os usuários marcados para receber notificações acompanham o envio e a conclusão sem participar da assinatura.
-9. O PDF concluído é recuperado do Cofre da empresa, salvo no bucket privado do Supabase e identificado por SHA-256.
+5. Depois da revisão, o backend envia ao chat do colaborador um convite pessoal válido por sete dias.
+6. Ao abrir o convite, o Bitrix24 confirma a identidade e o termo passa para **Visualizado**.
+7. O colaborador digita, desenha ou importa a assinatura dentro do Bitrix24; o PDF passa para **Assinado**.
+8. Os usuários escolhidos são notificados sem participar da assinatura.
+9. O PDF assinado é preservado no bucket privado do Supabase e enviado ao Drive do Bitrix24.
+10. Somente após a confirmação na pasta `Termo de Responsabilidade` o termo passa para **Concluído**.
 
 Lucas e Osmar podem operar o fluxo inicial. Nicoly e Marcelo recebem notificações. Essas atribuições são editáveis em **Configurações > Usuários e acessos**.
 
@@ -22,7 +23,7 @@ Lucas e Osmar podem operar o fluxo inicial. Nicoly e Marcelo recebem notificaç�
 - NestJS, Prisma e PostgreSQL/Supabase no backend.
 - OAuth e REST do Bitrix24 para identidade, pessoas, departamentos e notificações.
 - Docxtemplater e LibreOffice headless para DOCX e PDF.
-- Bitrix24 e-Signature for HR para envio, assinatura e Cofre da empresa.
+- Chat, OAuth, `REST_APP_URI` e Drive do Bitrix24 para convite, identidade, assinatura e arquivo final.
 - Supabase Storage privado para templates, prévias e documentos concluídos.
 - Docker Compose para desenvolvimento e Render para HTTPS público.
 
@@ -54,10 +55,12 @@ Copie `.env.example` para `.env`. Nunca envie o `.env` ao Git ou ao chat.
 
 - Supabase: `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
 - Segurança: `JWT_SECRET`, `BITRIX_TOKEN_ENCRYPTION_KEY`.
-- Bitrix24: `BITRIX_CLIENT_ID`, `BITRIX_CLIENT_SECRET`, `BITRIX_PORTAL_ORIGIN`, `BITRIX_SIGN_COMPANY_CRM_ID`.
+- Bitrix24: `BITRIX_CLIENT_ID`, `BITRIX_CLIENT_SECRET`, `BITRIX_PORTAL_ORIGIN`, `BITRIX_DRIVE_OWNER_USER_ID`, `BITRIX_DRIVE_FOLDER_NAME`.
 - URLs: `PUBLIC_BACKEND_URL`, `FRONTEND_URL`, `CORS_ORIGINS`, `VITE_API_URL`.
 
 Nenhum segredo pode usar prefixo `VITE_`. As listas de operadores e notificados do ambiente são apenas valores iniciais; depois da instalação, as escolhas persistem no banco.
+O aplicativo local precisa dos escopos `basic`, `user`, `crm`, `im` e `disk`; qualquer alteração
+de escopo exige salvar e reinstalar o aplicativo no portal.
 
 ## Verificação técnica
 

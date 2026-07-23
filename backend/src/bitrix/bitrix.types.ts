@@ -81,3 +81,21 @@ export interface BitrixSafeDocument {
   role: string;
   file_url: string;
 }
+
+export interface BitrixDiskStorage {
+  ID: string;
+  NAME: string;
+  ENTITY_TYPE: 'user' | 'common' | 'group' | string;
+  ENTITY_ID: string;
+  ROOT_OBJECT_ID: string;
+}
+
+export interface BitrixDiskObject {
+  ID: string;
+  NAME: string;
+  STORAGE_ID: string;
+  TYPE: 'file' | 'folder' | string;
+  PARENT_ID?: string;
+  DETAIL_URL?: string;
+  DOWNLOAD_URL?: string;
+}

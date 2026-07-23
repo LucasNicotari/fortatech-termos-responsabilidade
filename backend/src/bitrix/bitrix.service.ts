@@ -10,6 +10,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   BitrixCompanyProvider,
   BitrixDepartment,
+  BitrixDiskObject,
+  BitrixDiskStorage,
   BitrixDocumentResult,
   BitrixEventHandler,
   BitrixMember,
@@ -76,7 +78,7 @@ export class BitrixService {
         type: 'BITRIX_ERROR', source: 'bitrix', endpoint: method, method: 'POST',
         durationMs: Date.now() - startedAt, payload: this.describePayload(params), error: message
       });
-      throw error;
+      throw new Error(message);
     }
   }
 
@@ -178,6 +180,38 @@ export class BitrixService {
       SYSTEM: 'N',
       URL_PREVIEW: 'N'
     });
+  }
+
+  async archiveResponsibilityTerm(pdf: Buffer, fileName: string) {
+    const ownerUserId = String(this.config.get<string>('BITRIX_DRIVE_OWNER_USER_ID') || '').trim();
+    const folderName = String(
+      this.config.get<string>('BITRIX_DRIVE_FOLDER_NAME') || 'Termo de Responsabilidade'
+    ).trim();
+    if (!/^\d+$/.test(ownerUserId)) {
+      throw new Error('BITRIX_DRIVE_OWNER_USER_ID nao configurado');
+    }
+    if (!folderName) throw new Error('BITRIX_DRIVE_FOLDER_NAME nao configurado');
+
+    const storages = await this.call<BitrixDiskStorage[]>('disk.storage.getlist', {
+      filter: { ENTITY_TYPE: 'user', ENTITY_ID: ownerUserId }
+    });
+    const storage = (storages || []).find((item) =>
+      String(item.ENTITY_TYPE).toLowerCase() === 'user'
+      && String(item.ENTITY_ID) === ownerUserId
+    );
+    if (!storage?.ROOT_OBJECT_ID) {
+      throw new Error(`Drive do usuario Bitrix24 ${ownerUserId} nao localizado`);
+    }
+
+    const folder = await this.ensureDriveFolder(storage.ROOT_OBJECT_ID, folderName);
+    const result = await this.call<BitrixDiskObject>('disk.folder.uploadfile', {
+      id: Number(folder.ID),
+      data: { NAME: fileName },
+      fileContent: [fileName, pdf.toString('base64')],
+      generateUniqueName: true
+    });
+    if (!result?.ID) throw new Error('Bitrix24 nao confirmou o arquivo salvo no Drive');
+    return { file: result, folder, storage };
   }
 
   async ensureRestAppUriPlacement(handler: string) {
@@ -297,8 +331,14 @@ export class BitrixService {
   private describePayload(params: Record<string, unknown>) {
     const fields = params.fields as Record<string, unknown> | undefined;
     const files = fields?.files as Array<{ fileName?: string; fileContent?: string }> | undefined;
+    const fileContent = Array.isArray(params.fileContent)
+      ? params.fileContent as unknown[]
+      : undefined;
     return {
       ...params,
+      fileContent: fileContent
+        ? [String(fileContent[0] || ''), `[base64:${String(fileContent[1] || '').length}]`]
+        : undefined,
       fields: fields ? {
         ...fields,
         files: files?.map((file) => ({ fileName: file.fileName, bytesBase64: file.fileContent?.length }))
@@ -324,6 +364,43 @@ export class BitrixService {
     if (method === 'user.current') return LOCAL_BITRIX_USERS[0];
     if (method === 'im.notify.personal.add') return Date.now();
     if (method === 'im.message.add') return Date.now();
+    if (method === 'disk.storage.getlist') {
+      return [{
+        ID: 'local-storage',
+        NAME: 'Drive local',
+        ENTITY_TYPE: 'user',
+        ENTITY_ID: String((params.filter as Record<string, unknown> | undefined)?.ENTITY_ID || '8465'),
+        ROOT_OBJECT_ID: 'local-root'
+      }];
+    }
+    if (method === 'disk.folder.getchildren') {
+      return [{
+        ID: 'local-terms-folder',
+        NAME: 'Termo de Responsabilidade',
+        STORAGE_ID: 'local-storage',
+        TYPE: 'folder',
+        PARENT_ID: 'local-root'
+      }];
+    }
+    if (method === 'disk.folder.addsubfolder') {
+      return {
+        ID: 'local-terms-folder',
+        NAME: String((params.data as Record<string, unknown> | undefined)?.NAME || ''),
+        STORAGE_ID: 'local-storage',
+        TYPE: 'folder',
+        PARENT_ID: String(params.id || '')
+      };
+    }
+    if (method === 'disk.folder.uploadfile') {
+      return {
+        ID: `local-file-${Date.now()}`,
+        NAME: String((params.data as Record<string, unknown> | undefined)?.NAME || ''),
+        STORAGE_ID: 'local-storage',
+        TYPE: 'file',
+        PARENT_ID: String(params.id || ''),
+        DETAIL_URL: 'http://localhost/drive/term.pdf'
+      };
+    }
     if (method === 'placement.get') return [];
     if (method === 'placement.bind') return true;
     if (method === 'sign.b2e.company.provider.list') {
@@ -353,6 +430,33 @@ export class BitrixService {
     if (method === 'event.bind') return true;
     if (method === 'event.get') return [];
     throw new Error(`Metodo Bitrix24 ${method} nao simulado no modo local`);
+  }
+
+  private async ensureDriveFolder(rootFolderId: string, folderName: string) {
+    const find = async () => {
+      const children = await this.call<BitrixDiskObject[]>('disk.folder.getchildren', {
+        id: Number(rootFolderId),
+        filter: { NAME: folderName }
+      });
+      return (children || []).find((item) =>
+        String(item.TYPE).toLowerCase() === 'folder'
+        && item.NAME.localeCompare(folderName, 'pt-BR', { sensitivity: 'base' }) === 0
+      );
+    };
+    const existing = await find();
+    if (existing) return existing;
+    try {
+      const created = await this.call<BitrixDiskObject>('disk.folder.addsubfolder', {
+        id: Number(rootFolderId),
+        data: { NAME: folderName }
+      });
+      if (created?.ID) return created;
+    } catch (error) {
+      const concurrentlyCreated = await find();
+      if (concurrentlyCreated) return concurrentlyCreated;
+      throw error;
+    }
+    throw new Error(`Pasta "${folderName}" nao localizada nem criada no Drive`);
   }
 }
 

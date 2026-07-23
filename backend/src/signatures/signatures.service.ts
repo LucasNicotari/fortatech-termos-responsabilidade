@@ -70,6 +70,8 @@ export class SignaturesService {
       employeeName: signature.employee.nome,
       documentName: signature.sendRequest.documentFileName || 'Termo de Responsabilidade.pdf',
       status: signature.status,
+      archiveStatus: signature.archiveStatus,
+      archiveError: signature.archiveError,
       finished,
       previewUrl: await this.storage.createSignedUrl(
         finished && signature.signedStoragePath
@@ -156,16 +158,17 @@ export class SignaturesService {
       await transaction.signature.update({
         where: { id: signature.id },
         data: {
-          status: SignatureStatus.FINISHED,
-          rawStatusCode: 'fortadocs-signed',
-          bitrixStage: 'Assinado pelo colaborador no FortaDocs',
+          status: SignatureStatus.SIGNED,
+          rawStatusCode: 'fortadocs-signed-awaiting-drive',
+          bitrixStage: 'Assinado; aguardando arquivamento no Drive do Bitrix24',
           signedAt: now,
-          finishedAt: now,
-          archiveStatus: ArchiveStatus.ARCHIVED,
+          finishedAt: null,
+          archiveStatus: ArchiveStatus.PENDING,
+          archiveError: null,
           signedStoragePath: path,
           signedSha256: pdfSha256,
           signedFileSize: pdf.length,
-          archivedAt: now,
+          archivedAt: null,
           lastSyncedAt: now,
           errorMessage: null
         }
@@ -173,8 +176,8 @@ export class SignaturesService {
       await transaction.signatureEvent.create({
         data: {
           signatureId: signature.id,
-          eventType: 'FORTADOCS_SIGNATURE_COMPLETED',
-          status: SignatureStatus.FINISHED,
+          eventType: 'FORTADOCS_SIGNATURE_SIGNED',
+          status: SignatureStatus.SIGNED,
           bitrixStage: 'Assinado pelo colaborador no FortaDocs',
           payload: {
             bitrixUserId: invitation.bitrixUserId,
@@ -188,7 +191,7 @@ export class SignaturesService {
       });
       await transaction.sendRequest.update({
         where: { id: signature.sendRequestId! },
-        data: { status: SendRequestStatus.COMPLETED }
+        data: { status: SendRequestStatus.SIGNED }
       });
     });
     await this.notifications.notifySigned(
@@ -196,6 +199,7 @@ export class SignaturesService {
       signature.sendRequestId,
       signature.employee.nome
     );
+    await this.archiveFortaDocsToBitrixDrive(signature.id, pdf);
     return this.getInternalSigningSession(invitationId);
   }
 
@@ -335,7 +339,7 @@ export class SignaturesService {
   async sync(dto: SyncSignaturesDto) {
     if (dto.signatureId) return this.syncOne(dto.signatureId);
     const signatures = await this.prisma.signature.findMany({
-      where: { status: { in: [SignatureStatus.PENDING, SignatureStatus.SENT, SignatureStatus.VIEWED, SignatureStatus.IN_PROGRESS, SignatureStatus.ERROR] } }
+      where: { status: { in: [SignatureStatus.PENDING, SignatureStatus.SENT, SignatureStatus.VIEWED, SignatureStatus.IN_PROGRESS, SignatureStatus.SIGNED, SignatureStatus.ERROR] } }
     });
     return Promise.all(signatures.map((signature) => this.syncOne(signature.id)));
   }
@@ -403,7 +407,9 @@ export class SignaturesService {
     await this.prisma.signature.update({
       where: { id }, data: { archiveStatus: ArchiveStatus.PENDING, archiveError: null }
     });
-    if (signature.provider === SignatureProvider.FORTADOCS) return this.findOne(id);
+    if (signature.provider === SignatureProvider.FORTADOCS) {
+      return this.archiveFortaDocsToBitrixDrive(id);
+    }
     return signature.provider === SignatureProvider.ZAPSIGN
       ? this.archiveZapSign(id)
       : this.archiveBitrix(id);
@@ -411,8 +417,8 @@ export class SignaturesService {
 
   async getFileUrl(id: string) {
     const signature = await this.findOne(id);
-    if (!signature.signedStoragePath || signature.archiveStatus !== ArchiveStatus.ARCHIVED) {
-      throw new NotFoundException('Backup do documento assinado ainda nao disponivel');
+    if (!signature.signedStoragePath) {
+      throw new NotFoundException('Documento assinado ainda nao disponivel');
     }
     return {
       url: await this.storage.createSignedUrl(
@@ -426,7 +432,12 @@ export class SignaturesService {
 
   private async syncOne(id: string, eventStatus?: string, payload?: unknown) {
     const signature = await this.findOne(id);
-    if (signature.provider === SignatureProvider.FORTADOCS) return signature;
+    if (signature.provider === SignatureProvider.FORTADOCS) {
+      return signature.status === SignatureStatus.SIGNED
+        && signature.archiveStatus !== ArchiveStatus.ARCHIVED
+        ? this.archiveFortaDocsToBitrixDrive(id)
+        : signature;
+    }
     if (signature.provider === SignatureProvider.ZAPSIGN) {
       return this.syncZapSign(signature, eventStatus, payload);
     }
@@ -535,6 +546,94 @@ export class SignaturesService {
       await this.archiveZapSign(signature.id, document);
     }
     return this.findOne(signature.id);
+  }
+
+  private async archiveFortaDocsToBitrixDrive(id: string, providedPdf?: Buffer) {
+    const signature = await this.findOne(id);
+    if (!signature.sendRequestId || !signature.sendRequest?.documentFileName || !signature.signedStoragePath) {
+      throw new BadRequestException('Assinatura FortaDocs sem PDF assinado para arquivamento');
+    }
+    if (signature.bitrixDriveFileId && signature.status === SignatureStatus.FINISHED) {
+      return signature;
+    }
+    try {
+      const pdf = providedPdf || await this.storage.download(signature.signedStoragePath);
+      if (pdf.subarray(0, 4).toString('ascii') !== '%PDF') {
+        throw new Error('Arquivo assinado nao e um PDF valido');
+      }
+      const archived = await this.bitrix.archiveResponsibilityTerm(
+        pdf,
+        this.pdfFileName(signature.sendRequest.documentFileName)
+      );
+      const now = new Date();
+      await this.prisma.$transaction([
+        this.prisma.signature.update({
+          where: { id },
+          data: {
+            status: SignatureStatus.FINISHED,
+            rawStatusCode: 'fortadocs-drive-archived',
+            bitrixStage: 'Concluido e salvo no Drive do Bitrix24',
+            finishedAt: now,
+            archiveStatus: ArchiveStatus.ARCHIVED,
+            archiveError: null,
+            bitrixDriveFileId: String(archived.file.ID),
+            bitrixDriveFolderId: String(archived.folder.ID),
+            bitrixDriveDetailUrl: archived.file.DETAIL_URL || null,
+            archivedAt: now,
+            lastSyncedAt: now,
+            errorMessage: null
+          }
+        }),
+        this.prisma.sendRequest.update({
+          where: { id: signature.sendRequestId },
+          data: { status: SendRequestStatus.COMPLETED, failureReason: null }
+        }),
+        this.prisma.signatureEvent.create({
+          data: {
+            signatureId: id,
+            eventType: 'FORTADOCS_DRIVE_ARCHIVED',
+            status: SignatureStatus.FINISHED,
+            bitrixStage: 'Concluido e salvo no Drive do Bitrix24',
+            payload: {
+              bitrixDriveFileId: String(archived.file.ID),
+              bitrixDriveFolderId: String(archived.folder.ID),
+              storageId: String(archived.storage.ID)
+            }
+          }
+        })
+      ]);
+    } catch (error) {
+      const message = this.driveArchiveError(error);
+      await this.prisma.$transaction([
+        this.prisma.signature.update({
+          where: { id },
+          data: {
+            status: SignatureStatus.SIGNED,
+            rawStatusCode: 'fortadocs-drive-archive-failed',
+            bitrixStage: 'Assinado; falha ao salvar no Drive do Bitrix24',
+            archiveStatus: ArchiveStatus.FAILED,
+            archiveError: message,
+            finishedAt: null,
+            archivedAt: null,
+            lastSyncedAt: new Date()
+          }
+        }),
+        this.prisma.sendRequest.update({
+          where: { id: signature.sendRequestId },
+          data: { status: SendRequestStatus.SIGNED }
+        }),
+        this.prisma.signatureEvent.create({
+          data: {
+            signatureId: id,
+            eventType: 'FORTADOCS_DRIVE_ARCHIVE_FAILED',
+            status: SignatureStatus.SIGNED,
+            bitrixStage: 'Falha ao salvar no Drive do Bitrix24',
+            payload: { error: message }
+          }
+        })
+      ]);
+    }
+    return this.findOne(id);
   }
 
   private async archiveBitrix(id: string) {
@@ -662,11 +761,29 @@ export class SignaturesService {
   }
 
   private toRequestStatus(status: SignatureStatus) {
-    if (status === SignatureStatus.SIGNED || status === SignatureStatus.FINISHED) return SendRequestStatus.COMPLETED;
+    if (status === SignatureStatus.FINISHED) return SendRequestStatus.COMPLETED;
+    if (status === SignatureStatus.SIGNED) return SendRequestStatus.SIGNED;
+    if (status === SignatureStatus.VIEWED) return SendRequestStatus.VIEWED;
+    if (status === SignatureStatus.SENT) return SendRequestStatus.SENT;
     if (status === SignatureStatus.DECLINED) return SendRequestStatus.DECLINED;
     if (status === SignatureStatus.CANCELED) return SendRequestStatus.CANCELED;
     if (status === SignatureStatus.ERROR) return SendRequestStatus.FAILED;
     return SendRequestStatus.IN_PROGRESS;
+  }
+
+  private pdfFileName(value: string) {
+    return value.toLowerCase().endsWith('.pdf') ? value : `${value}.pdf`;
+  }
+
+  private driveArchiveError(error: unknown) {
+    const message = error instanceof Error ? error.message : 'Falha ao salvar no Drive do Bitrix24';
+    if (/insufficient_scope/i.test(message)) {
+      return 'O aplicativo precisa da permissao Drive (disk) no Bitrix24 e deve ser reinstalado';
+    }
+    if (/access denied|forbidden|denied|permission/i.test(message)) {
+      return 'O usuario instalador nao possui permissao para gravar na pasta do Drive configurada';
+    }
+    return message;
   }
 
   private toJson(value: unknown) {

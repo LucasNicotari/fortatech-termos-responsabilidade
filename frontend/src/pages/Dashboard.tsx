@@ -22,7 +22,7 @@ export function Dashboard() {
     { label: 'Colaboradores', value: data?.totalEmployees || 0, detail: 'com termos', icon: Users, to: '/terms', tone: 'bg-sky-50 text-b24-blue-dark' },
     { label: 'Aguardando', value: data?.pending || 0, detail: 'ações pendentes', icon: Clock3, to: '/terms', tone: 'bg-amber-50 text-amber-600' },
     { label: 'Enviados', value: data?.sent || 0, detail: 'termos enviados', icon: Send, to: '/terms', tone: 'bg-blue-50 text-blue-600' },
-    { label: 'Concluídos', value: data?.signed || 0, detail: 'termos assinados', icon: CheckCircle2, to: '/terms', tone: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Concluídos', value: data?.signed || 0, detail: 'salvos no Drive', icon: CheckCircle2, to: '/terms', tone: 'bg-emerald-50 text-emerald-600' },
     { label: 'Atenção', value: data?.errors || 0, detail: data?.errors === 1 ? 'falha encontrada' : 'falhas encontradas', icon: AlertCircle, to: '/settings?tab=activity', tone: data?.errors ? 'bg-red-50 text-coral' : 'bg-zinc-100 text-steel' }
   ];
 

@@ -13,6 +13,7 @@ flowchart LR
     USERS[Usuarios, fotos e departamentos]
     CHAT[Chat pessoal]
     SLIDER[Slider REST_APP_URI]
+    DRIVE[Drive pessoal 8465]
   end
 
   subgraph RENDER[Render HTTPS]
@@ -33,6 +34,7 @@ flowchart LR
   WEB --> API
   API <--> USERS
   API --> CHAT
+  API --> DRIVE
   CHAT --> SIGNER
   SIGNER --> SLIDER
   SLIDER --> WEB
@@ -53,6 +55,7 @@ flowchart LR
 | Bitrix24 OAuth | Confirma o usuario atual no painel e no link de assinatura |
 | `im.message.add` | Envia o convite ao chat pessoal do colaborador |
 | `REST_APP_URI` | Abre o FortaDocs dentro do portal com contexto do convite |
+| Drive Bitrix24 | Guarda o PDF final em `Termo de Responsabilidade` e confirma a conclusao |
 
 ## Identidades e sessoes
 
@@ -104,7 +107,11 @@ flowchart TD
 5. O colaborador abre o link no chat e escolhe assinatura digitada, desenhada ou imagem.
 6. O frontend normaliza a assinatura para PNG.
 7. O backend valida o PNG, incorpora-o na ultima pagina e calcula novos hashes.
-8. O PDF final e arquivado e o convite e concluido em transacao atomica.
+8. O convite e encerrado e o documento passa para `SIGNED`; o PDF privado permanece no Supabase.
+9. A API localiza o Drive do usuario `8465`, envia o arquivo para `Termo de Responsabilidade` e
+   guarda os IDs retornados.
+10. Somente depois dessa confirmacao o documento passa para `FINISHED` e a solicitacao para
+    `COMPLETED`.
 
 O diagrama detalhado de sequencia, estados e controles esta em
 [internal-signing-flow.md](internal-signing-flow.md).

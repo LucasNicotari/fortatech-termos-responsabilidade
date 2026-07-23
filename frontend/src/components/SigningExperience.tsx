@@ -8,6 +8,8 @@ export interface SigningSessionView {
   employeeName: string;
   documentName: string;
   status: string;
+  archiveStatus?: 'NOT_REQUIRED' | 'PENDING' | 'ARCHIVED' | 'FAILED';
+  archiveError?: string | null;
   finished: boolean;
   previewUrl: string;
   downloadUrl?: string | null;
@@ -176,9 +178,7 @@ export function SigningExperience({
       <CenteredMessage
         icon={<CheckCircle2 className="text-b24-green" size={46} />}
         title="Assinatura concluída"
-        message={local
-          ? 'O teste foi concluído. Não existe mais nenhuma assinatura pendente para você neste termo.'
-          : 'O termo foi assinado e arquivado. Não existe mais nenhuma ação pendente para você, e o responsável pelo envio foi notificado.'}
+        message={completionMessage(session, local)}
         action={session.downloadUrl
           ? <a href={session.downloadUrl} className="focus-ring mt-5 inline-flex items-center gap-2 rounded-lg bg-b24-blue px-4 py-2.5 text-sm font-semibold text-white"><Download size={17} /> Baixar documento assinado</a>
           : undefined}
@@ -242,6 +242,16 @@ export function SigningExperience({
       </div>
     </main>
   );
+}
+
+function completionMessage(session: SigningSessionView, local: boolean) {
+  if (local) {
+    return 'O teste foi concluído. Não existe mais nenhuma assinatura pendente para você neste termo.';
+  }
+  if (session.archiveStatus === 'ARCHIVED') {
+    return 'O termo foi assinado e salvo no Drive do Bitrix24. Não existe mais nenhuma ação pendente para você, e o responsável pelo envio foi notificado.';
+  }
+  return 'Sua assinatura foi registrada e não existe mais nenhuma ação pendente para você. O FortaDocs está finalizando o arquivamento no Drive do Bitrix24.';
 }
 
 function trimmedSignatureDataUrl(canvas: HTMLCanvasElement) {
