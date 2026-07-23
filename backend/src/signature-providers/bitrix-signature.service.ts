@@ -124,13 +124,7 @@ export class BitrixSignatureService {
       providerUid: provider.uid,
       regionDocumentType: '12.999'
     };
-    const publicUrl = this.config.get<string>('PUBLIC_BACKEND_URL');
-    if (!this.localMode && publicUrl) {
-      await this.bitrix.ensureEventHandlers(
-        ['OnSignB2eDocumentStatusChanged', 'OnSignB2eMemberStatusChanged'],
-        `${publicUrl.replace(/\/$/, '')}/integrations/bitrix/events`
-      );
-    }
+    await this.ensureSignatureEvents();
     await this.prisma.setting.upsert({
       where: { key: SETTINGS_KEY },
       update: { value: value as unknown as Prisma.InputJsonValue, updatedByUserId },
@@ -161,6 +155,7 @@ export class BitrixSignatureService {
     if (!provider) {
       throw new BadRequestException('Nenhum provedor de assinatura Bitrix24 está disponível');
     }
+    await this.ensureSignatureEvents();
     return { ...settings, providerUid: provider.uid } as Required<BitrixSignatureSettings>;
   }
 
@@ -192,6 +187,15 @@ export class BitrixSignatureService {
   private defaultCompanyCrmId() {
     const configured = Number(this.config.get<string>('BITRIX_SIGN_COMPANY_CRM_ID') || 67539);
     return Number.isInteger(configured) && configured > 0 ? configured : 67539;
+  }
+
+  private async ensureSignatureEvents() {
+    const publicUrl = this.config.get<string>('PUBLIC_BACKEND_URL');
+    if (this.localMode || !publicUrl) return;
+    await this.bitrix.ensureEventHandlers(
+      ['OnSignB2eDocumentStatusChanged', 'OnSignB2eMemberStatusChanged'],
+      `${publicUrl.replace(/\/$/, '')}/integrations/bitrix/events`
+    );
   }
 
   private friendlyConfigurationError(error: unknown) {
