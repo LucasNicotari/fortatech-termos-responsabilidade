@@ -1,10 +1,17 @@
-import { responsibilityTermFileName, SendRequestsService } from './send-requests.service';
+import { responsibilityTermFileName, SendRequestsService, signingUrlForCurrentUser } from './send-requests.service';
 
 describe('SendRequestsService', () => {
   it('gera o nome do PDF com o primeiro e o ultimo nome do colaborador', () => {
     expect(responsibilityTermFileName('Lucas Nicotari Maffei')).toBe('TR.Lucas_Maffei.pdf');
     expect(responsibilityTermFileName('João D\'Angelo')).toBe('TR.Joao_DAngelo.pdf');
     expect(responsibilityTermFileName('  Nicoly  ')).toBe('TR.Nicoly.pdf');
+  });
+
+  it('expoe o convite somente quando o operador tambem e o colaborador', () => {
+    const url = 'https://portal.bitrix24.com/marketplace/view/app/?params[signing]=secret';
+    expect(signingUrlForCurrentUser(url, 8465, '8465')).toBe(url);
+    expect(signingUrlForCurrentUser(url, 8465, '8243')).toBeUndefined();
+    expect(signingUrlForCurrentUser(url, 8465)).toBeUndefined();
   });
 
   it('retorna erro de negocio quando o CPF pertence a outro colaborador', async () => {

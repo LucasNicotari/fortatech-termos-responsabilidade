@@ -25,8 +25,11 @@ sequenceDiagram
     Note over API,DB: Token aleatorio; banco recebe somente o hash
     API->>Chat: im.message.add com link REST_APP_URI
     Chat-->>Colaborador: Mensagem pessoal
+    API->>Chat: im.notify.personal.add
+    Chat-->>Colaborador: Alerta clicavel
     API->>DB: Registra mensagem, status SENT e evento
     API-->>Web: Envio concluido
+    Note over Web,Colaborador: Se operador = colaborador, o Web exibe Abrir minha assinatura
 
     Colaborador->>Chat: Clica em Abrir e assinar
     Chat->>API: POST launch + OAuth + PLACEMENT_OPTIONS

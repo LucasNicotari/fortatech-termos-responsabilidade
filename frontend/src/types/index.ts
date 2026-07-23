@@ -30,6 +30,7 @@ export interface SendRequest {
   requestedAt: string;
   sentAt?: string;
   failureReason?: string;
+  selfSigningUrl?: string;
   documentFileName?: string;
   unsignedSha256?: string;
   equipment?: Equipment[];

@@ -53,16 +53,22 @@ https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/install
    /marketplace/view/CLIENT_ID/?params[signing]=TOKEN
    ```
 
-7. O Bitrix24 abre o link dentro do portal e envia `PLACEMENT_OPTIONS` ao backend.
-8. O backend consulta `user.current` e confere:
+7. `im.notify.personal.add` cria também um alerta clicável no sino do Bitrix24. A falha desse
+   alerta secundário não invalida a mensagem já entregue no chat.
+8. O Bitrix24 abre o link dentro do portal e envia `PLACEMENT_OPTIONS` ao backend.
+9. O backend consulta `user.current` e confere:
 
    - token valido;
    - convite ativo e nao expirado;
    - ID do usuario conectado igual ao ID do colaborador;
    - colaborador da solicitacao igual ao usuario conectado.
 
-9. Uma sessao restrita de uma hora e emitida. Essa sessao acessa somente `/signing/*` e nao abre
+10. Uma sessao restrita de uma hora e emitida. Essa sessao acessa somente `/signing/*` e nao abre
    Dashboard, Termos, Configuracoes ou APIs administrativas.
+
+Quando o operador envia um termo para o próprio usuário, a resposta autenticada também apresenta
+**Abrir minha assinatura** com o mesmo convite recebido no chat. O convite nunca é devolvido ao
+operador quando o colaborador escolhido é outra pessoa.
 
 ## Formas de assinatura
 
@@ -85,6 +91,9 @@ inclusive a si mesmo.
 Os selecionados recebem notificacao no envio e na conclusao. A trilha de eventos impede a mesma
 notificacao de ser registrada duas vezes para o mesmo usuario e estado.
 
+O colaborador recebe dois sinais complementares: a mensagem persistente no chat e o alerta pessoal
+do Bitrix24. O envio não depende de e-mail.
+
 ## Compatibilidade
 
 Registros historicos com provedor `BITRIX` ou `ZAPSIGN` continuam legiveis. Novos registros usam
@@ -93,5 +102,6 @@ Registros historicos com provedor `BITRIX` ou `ZAPSIGN` continuam legiveis. Novo
 ## Referencias oficiais
 
 - [Mensagem em chat com `im.message.add`](https://apidocs.bitrix24.com/api-reference/chats/messages/im-message-add.html)
+- [Notificação pessoal com `im.notify.personal.add`](https://apidocs.bitrix24.com/api-reference/chats/notifications/im-notify-personal-add.html)
 - [Link interno com `REST_APP_URI`](https://apidocs.bitrix24.com/api-reference/widgets/universal/app-url.html)
 - [Registro do manipulador com `placement.bind`](https://apidocs.bitrix24.com/api-reference/widgets/placement-bind.html)

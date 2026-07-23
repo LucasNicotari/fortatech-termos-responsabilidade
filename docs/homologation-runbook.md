@@ -98,13 +98,15 @@ Destino autorizado: `lucas.nicotari@fortatech.com.br`.
 5. Gere a previa e confira todas as paginas.
 6. Clique em **Enviar pelo chat** uma unica vez.
 7. Confira a mensagem no chat pessoal de Lucas.
-8. Clique no link e confirme que a tela abre dentro do Bitrix24.
-9. Teste uma forma de assinatura: digitar, desenhar ou importar imagem.
-10. Marque a confirmacao de leitura e finalize.
-11. Confira o estado `FINISHED` no painel Termos.
-12. Baixe o PDF final e confira a assinatura incorporada.
-13. Confirme que todos os selecionados receberam notificacao de conclusao.
-14. Confirme `ARCHIVED`, tamanho e SHA-256 no banco.
+8. Confira também o alerta pessoal no sino do Bitrix24.
+9. No autoenvio, use **Abrir minha assinatura** ou o mesmo link recebido no chat e confirme que
+   a tela abre dentro do Bitrix24.
+10. Teste uma forma de assinatura: digitar, desenhar ou importar imagem.
+11. Marque a confirmacao de leitura e finalize.
+12. Confira o estado `FINISHED` no painel Termos.
+13. Baixe o PDF final e confira a assinatura incorporada.
+14. Confirme que todos os selecionados receberam notificacao de conclusao.
+15. Confirme `ARCHIVED`, tamanho e SHA-256 no banco.
 
 ## 6. Testes negativos
 
@@ -121,7 +123,7 @@ Destino autorizado: `lucas.nicotari@fortatech.com.br`.
 - commit e deploy identificados;
 - `/health` e frontend em HTTP 200;
 - sete migrations aplicadas;
-- 51 testes automatizados aprovados;
+- 52 testes automatizados aprovados;
 - lint e builds aprovados;
 - escopos `im` e `placement` validados;
 - envio ao chat e abertura `REST_APP_URI` comprovados;

@@ -12,6 +12,7 @@ import { ZapSignDocument } from '../signature-providers/zapsign.types';
 import { SyncSignaturesDto } from './dto/sync-signatures.dto';
 import { TermNotificationsService } from '../notifications/term-notifications.service';
 import { CompleteInternalSignatureDto } from './dto/complete-internal-signature.dto';
+import { CompleteLocalSignatureDto } from './dto/complete-local-signature.dto';
 
 const STATUS_MAP: Record<string, SignatureStatus> = {
   pending: SignatureStatus.PENDING,
@@ -79,12 +80,16 @@ export class SignaturesService {
     };
   }
 
-  async completeLocalSigning(token: string, signatureDataUrl: string) {
+  async completeLocalSigning(token: string, dto: CompleteLocalSignatureDto) {
+    if (!dto.accepted) throw new BadRequestException('Confirme a leitura e concordancia antes de assinar');
+    if (dto.method === SignatureMethod.TYPED && !dto.typedName?.trim()) {
+      throw new BadRequestException('Digite o nome usado na assinatura');
+    }
     const signature = await this.findLocalSignatureByToken(token);
     if (signature.status === SignatureStatus.SIGNED || signature.status === SignatureStatus.FINISHED) {
       return this.getLocalSigningSession(token);
     }
-    await this.simulateLocalSignature(signature.id, signatureDataUrl);
+    await this.simulateLocalSignature(signature.id, dto.signatureDataUrl);
     return this.getLocalSigningSession(token);
   }
 

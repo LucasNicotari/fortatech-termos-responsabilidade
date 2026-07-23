@@ -27,7 +27,8 @@ cache. Quando houver alteracao no codigo, reconstrua uma vez com `npm.cmd run de
 - O login acontece automaticamente como administrador local.
 - O Bitrix24 e substituido por usuarios e departamentos sinteticos ativos.
 - As notificacoes sao aceitas localmente, mas nao sao entregues a ninguem.
-- A ZapSign e substituida por um provedor local; nenhum e-mail e enviado.
+- O chat e a assinatura do Bitrix24 sao substituidos por um provedor local; nenhuma mensagem ou
+  e-mail real e enviado.
 - Os PDFs ficam no volume local do Docker, e nao no Supabase.
 
 Essas simulacoes sao ativadas apenas pelas variaveis do arquivo `docker-compose.local.yml`.
@@ -39,9 +40,10 @@ O modo real continua separado e nao foi removido.
 2. Informe um CPF sintetico valido e adicione pelo menos um equipamento.
 3. Salve o rascunho e gere a previa em PDF.
 4. Clique para enviar. O envio sera registrado, mas nenhum e-mail sairá da maquina.
-5. Use o link **Abrir como colaborador** exibido no proprio formulario (ele tambem fica em
+5. Use o link **Abrir simulacao do colaborador** exibido no proprio formulario (ele tambem fica em
    **Termos**).
-6. Revise o PDF, desenhe a assinatura com mouse, touchpad ou dedo e confirme.
+6. Revise o PDF e escolha a mesma experiencia da producao: desenhar, digitar ou importar uma
+   imagem PNG/JPG.
 7. O sistema aplicara o autografo ao PDF, arquivara a copia local e liberara o download.
 
 ## Comandos uteis

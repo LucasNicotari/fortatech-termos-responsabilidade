@@ -200,7 +200,7 @@ export class SendRequestsService {
     return { request: updated, previewUrl: await this.storage.createSignedUrl(path, 300, false) };
   }
 
-  async send(id: string) {
+  async send(id: string, actorBitrixUserId?: string) {
     const request = await this.prisma.sendRequest.findUnique({
       where: { id },
       include: {
@@ -290,13 +290,30 @@ export class SendRequestsService {
         where: { id: signature.invitation!.id },
         data: { chatMessageId: String(chatMessageId) }
       });
+      let signerNotificationId: number | false | null = null;
+      try {
+        signerNotificationId = await this.bitrix.sendPersonalNotification({
+          userId: signerUserId,
+          message: `[URL=${signingUrl}]Você possui um Termo de Responsabilidade aguardando assinatura no FortaDocs.[/URL]`,
+          externalMessage: '',
+          tag: `FORTADOCS_SIGN_${id}_${signerUserId}`
+        });
+      } catch (notificationError) {
+        await this.logs.create({
+          type: 'BITRIX_SIGNER_NOTIFICATION_ERROR',
+          source: 'bitrix',
+          endpoint: 'im.notify.personal.add',
+          error: notificationError instanceof Error ? notificationError.message : 'Falha ao alertar o colaborador',
+          payload: { sendRequestId: id, signatureId: signature.id, bitrixUserId: signerUserId }
+        });
+      }
       await this.prisma.signatureEvent.create({
         data: {
           signatureId: signature.id,
           eventType: 'FORTADOCS_CHAT_SENT',
           status: SignatureStatus.SENT,
           bitrixStage: 'Aguardando assinatura do colaborador no FortaDocs',
-          payload: { bitrixUserId: signerUserId, chatMessageId, expiresInDays: 7 }
+          payload: { bitrixUserId: signerUserId, chatMessageId, signerNotificationId, expiresInDays: 7 }
         }
       });
       await this.prisma.sendAttempt.update({
@@ -317,7 +334,10 @@ export class SendRequestsService {
         include: { employee: true, equipment: true, signatures: true, notificationRecipients: true }
       });
       await this.notifications.notifySent(signature.id, id, request.employee.nome);
-      return updatedRequest;
+      return {
+        ...updatedRequest,
+        selfSigningUrl: signingUrlForCurrentUser(signingUrl, signerUserId, actorBitrixUserId)
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro desconhecido no envio';
       await this.prisma.sendAttempt.update({
@@ -480,4 +500,14 @@ export function responsibilityTermFileName(fullName: string) {
     .filter(Boolean)
     .join('_') || 'Colaborador';
   return `TR.${safeName}.pdf`;
+}
+
+export function signingUrlForCurrentUser(
+  signingUrl: string,
+  signerUserId: number,
+  actorBitrixUserId?: string
+) {
+  return actorBitrixUserId && String(signerUserId) === actorBitrixUserId
+    ? signingUrl
+    : undefined;
 }

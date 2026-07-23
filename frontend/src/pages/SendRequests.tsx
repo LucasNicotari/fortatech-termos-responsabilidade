@@ -111,7 +111,11 @@ export function SendRequests() {
       setSentMessage(providerQuery.data?.local
         ? 'Envio local simulado. Nenhum e-mail foi enviado; abra a experiência do colaborador abaixo.'
         : 'Termo criado no Bitrix24. O representante da empresa assina primeiro; depois o Bitrix24 libera a assinatura ao colaborador.');
-      setLocalSigningUrl(providerQuery.data?.local && localToken ? `/assinar/${encodeURIComponent(localToken)}` : '');
+      setLocalSigningUrl(
+        providerQuery.data?.local && localToken
+          ? `/assinar/${encodeURIComponent(localToken)}`
+          : data.selfSigningUrl || ''
+      );
       if (!providerQuery.data?.local) {
         setSentMessage('O link pessoal foi enviado ao chat do colaborador no Bitrix24. Ele ja pode abrir, revisar e assinar.');
       }
@@ -168,7 +172,12 @@ export function SendRequests() {
       </header>
 
       <ProviderNotice provider={providerQuery.data} ready={Boolean(providerReady)} />
-      {sentMessage && <SuccessMessage message={sentMessage} localSigningUrl={localSigningUrl} portalUrl={providerQuery.data?.portalUrl} />}
+      {sentMessage && <SuccessMessage
+        message={sentMessage}
+        signingUrl={localSigningUrl}
+        local={Boolean(providerQuery.data?.local)}
+        portalUrl={providerQuery.data?.portalUrl}
+      />}
 
       <div className="overflow-hidden rounded-xl border border-b24-border bg-white shadow-sm">
         <div className="grid grid-cols-3 border-b border-b24-border bg-b24-bg/45">
@@ -357,8 +366,14 @@ function normalizeText(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
 }
 
-function SuccessMessage({ message, localSigningUrl, portalUrl }: { message: string; localSigningUrl: string; portalUrl?: string }) {
-  return <div role="status" className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><span className="flex-1">{message}</span>{localSigningUrl && <a href={localSigningUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded bg-b24-blue px-3 py-2 font-semibold text-white"><ExternalLink size={16} /> Abrir como colaborador</a>}{!localSigningUrl && portalUrl && <a href={portalUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded bg-b24-blue px-3 py-2 font-semibold text-white"><ExternalLink size={16} /> Abrir Bitrix24 para assinar</a>}</div>;
+function SuccessMessage({ message, signingUrl, portalUrl, local }: {
+  message: string;
+  signingUrl: string;
+  portalUrl?: string;
+  local: boolean;
+}) {
+  const messagesUrl = portalUrl ? `${portalUrl.replace(/\/$/, '')}/online/` : '';
+  return <div role="status" className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><span className="flex-1">{message}</span>{signingUrl && <a href={signingUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded bg-b24-blue px-3 py-2 font-semibold text-white"><ExternalLink size={16} /> {local ? 'Abrir simulação do colaborador' : 'Abrir minha assinatura'}</a>}{!signingUrl && messagesUrl && <a href={messagesUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded bg-b24-blue px-3 py-2 font-semibold text-white"><ExternalLink size={16} /> Abrir mensagens do Bitrix24</a>}</div>;
 }
 
 function Field({ label, value, onChange, type = 'text', readOnly = false, required = false, hint, inputMode, placeholder, maxLength }: { label: string; value: string; onChange?: (value: string) => void; type?: string; readOnly?: boolean; required?: boolean; hint?: string; inputMode?: 'numeric'; placeholder?: string; maxLength?: number }) {

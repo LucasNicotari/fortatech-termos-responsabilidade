@@ -107,7 +107,8 @@ async function runEndToEnd(headers, employees) {
   }
   const sampleSignature = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
   const completed = await request(`/local-signatures/${encodeURIComponent(signature.providerDocumentId)}/complete`, {
-    method: 'POST', body: JSON.stringify({ signatureDataUrl: sampleSignature })
+    method: 'POST',
+    body: JSON.stringify({ method: 'DRAWN', accepted: true, signatureDataUrl: sampleSignature })
   });
   if (!completed.finished) throw new Error('A assinatura manuscrita local nao foi concluida');
   const finished = await request(`/signatures/${signature.id}`, { headers });

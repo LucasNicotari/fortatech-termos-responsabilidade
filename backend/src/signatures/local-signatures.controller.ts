@@ -15,6 +15,6 @@ export class LocalSignaturesController {
 
   @Post(':token/complete')
   complete(@Param('token') token: string, @Body() dto: CompleteLocalSignatureDto) {
-    return this.signatures.completeLocalSigning(token, dto.signatureDataUrl);
+    return this.signatures.completeLocalSigning(token, dto);
   }
 }

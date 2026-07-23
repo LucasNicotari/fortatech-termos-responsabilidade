@@ -41,8 +41,11 @@ export class SendRequestsController {
 
   @Post(':id/send')
   @UseGuards(TermOperatorGuard)
-  send(@Param('id') id: string) {
-    return this.sendRequests.send(id);
+  send(
+    @Param('id') id: string,
+    @CurrentUser() user?: { bitrixUserId?: string }
+  ) {
+    return this.sendRequests.send(id, user?.bitrixUserId);
   }
 
   @Post(':id/retry')

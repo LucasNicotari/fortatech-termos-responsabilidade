@@ -1,8 +1,3 @@
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { CompleteInternalSignatureDto } from './complete-internal-signature.dto';
 
-export class CompleteLocalSignatureDto {
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(2_000_000)
-  signatureDataUrl!: string;
-}
+export class CompleteLocalSignatureDto extends CompleteInternalSignatureDto {}
