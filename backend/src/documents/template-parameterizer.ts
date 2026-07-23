@@ -68,13 +68,14 @@ export function parameterizeResponsibilityTemplateXml(xml: string) {
 }
 
 export function formatResponsibilityTemplateXml(xml: string) {
-  const headings = new Set([
-    'TERMO DE RESPONSABILIDADE',
-    'Equipamentos Eletrônicos e de Informática'
+  const headings = new Map([
+    ['TERMO DE RESPONSABILIDADE', 22],
+    ['Equipamentos Eletrônicos e de Informática', 20]
   ]);
   return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
-    if (!headings.has(visibleText(paragraph).trim())) return paragraph;
-    return centerParagraph(paragraph);
+    const fontSize = headings.get(visibleText(paragraph).trim());
+    if (!fontSize) return paragraph;
+    return formatHeadingParagraph(paragraph, fontSize);
   });
 }
 
@@ -129,6 +130,13 @@ function centerParagraph(paragraph: string) {
     return paragraph.replace(/<w:pPr\b([^>]*)>/, '<w:pPr$1><w:jc w:val="center"/>');
   }
   return paragraph.replace(/<w:p\b([^>]*)>/, '<w:p$1><w:pPr><w:jc w:val="center"/></w:pPr>');
+}
+
+function formatHeadingParagraph(paragraph: string, fontSize: number) {
+  return centerParagraph(paragraph)
+    .replace(/<w:ind\b[^>]*\/>/g, '')
+    .replace(/<w:sz\b[^>]*\/>/g, `<w:sz w:val="${fontSize}"/>`)
+    .replace(/<w:szCs\b[^>]*\/>/g, `<w:szCs w:val="${fontSize}"/>`);
 }
 
 function visibleText(xml: string) {

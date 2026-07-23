@@ -20,7 +20,7 @@ async function main() {
   const input = resolve(inputArg);
   const output = resolve(option('--output') || '../templates/term.docx');
   const originalOutput = resolve(option('--original-output') || '../templates/original/term-original.docx');
-  if (input === output || input === originalOutput || output === originalOutput) {
+  if (input === output || output === originalOutput) {
     throw new Error('Entrada, original versionado e template de homologacao precisam ser arquivos diferentes');
   }
 

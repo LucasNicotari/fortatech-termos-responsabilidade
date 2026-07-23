@@ -5,7 +5,8 @@
 - `original/term-original.docx`: cópia imutável do documento recebido em 20/07/2026.
   SHA-256: `d2ce126783963851340238bfe0973bcfa5e3910222b21d316c68cbfae720c28c`.
 - `term.docx`: cópia operacional parametrizada, sem alterar o original. Os títulos
-  `TERMO DE RESPONSABILIDADE` e `Equipamentos Eletrônicos e de Informática` ficam centralizados.
+  `TERMO DE RESPONSABILIDADE` e `Equipamentos Eletrônicos e de Informática` ficam centralizados
+  na largura útil da página, sem recuo lateral, em 11 pt e 10 pt, respectivamente.
 
 O original não deve ser editado. Alterações aprovadas pelo RH/jurídico devem gerar uma nova
 versão, com novo hash e registro no banco.

@@ -55,7 +55,14 @@ describe('DocumentsService template parameterization', () => {
         'Equipamentos Eletrônicos e de Informática'
       ].includes(visibleTemplateText(match[0]).trim()));
     expect(centeredHeadings).toHaveLength(2);
-    centeredHeadings.forEach(([paragraph]) => expect(paragraph).toContain('<w:jc w:val="center"/>'));
+    centeredHeadings.forEach(([paragraph]) => {
+      expect(paragraph).toContain('<w:jc w:val="center"/>');
+      expect(paragraph).not.toContain('<w:ind');
+    });
+    expect(centeredHeadings[0][0]).toContain('<w:sz w:val="22"/>');
+    expect(centeredHeadings[0][0]).toContain('<w:szCs w:val="22"/>');
+    expect(centeredHeadings[1][0]).toContain('<w:sz w:val="20"/>');
+    expect(centeredHeadings[1][0]).toContain('<w:szCs w:val="20"/>');
     zip.file('word/document.xml', formatted);
 
     const template = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
