@@ -11,7 +11,7 @@
 - Acesso, perfil, operação e notificações independentes e auditáveis.
 - Tabelas `app_*` com RLS e DML de `anon`/`authenticated` revogado.
 - Bucket privado, URLs temporárias e limite de tipo/tamanho.
-- Webhook ZapSign autenticado com comparação em tempo constante e deduplicação.
+- Eventos Bitrix B2E autenticados pelo `application_token` e deduplicados.
 - Documento bloqueado após envio; reivindicação atômica evita envio duplicado.
 - PDF final validado, limitado, armazenado com SHA-256 e trilha de eventos.
 - Respostas de integração sanitizadas; CPF, e-mail, nome, tokens e URLs de assinatura são ocultados dos erros.
@@ -19,7 +19,7 @@
 ## Monitoramento mínimo
 
 - `/health` do backend e disponibilidade do frontend.
-- falhas `SEND_REQUEST_ERROR`, `ZAPSIGN_DOCUMENT_ERROR` e `BITRIX_TERM_NOTIFICATION_ERROR`;
+- falhas `SEND_REQUEST_ERROR`, `BITRIX_ERROR` e `BITRIX_TERM_NOTIFICATION_ERROR`;
 - eventos de webhook em `FAILED`;
 - assinaturas concluídas com `archive_status` diferente de `ARCHIVED`;
 - expiração/renovação do OAuth Bitrix;

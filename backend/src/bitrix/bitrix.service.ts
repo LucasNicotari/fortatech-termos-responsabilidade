@@ -8,11 +8,14 @@ import { LogsService } from '../logs/logs.service';
 import { LOCAL_BITRIX_USERS, LOCAL_DEPARTMENTS } from '../local-development/local-fixtures';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  BitrixCompanyProvider,
   BitrixDepartment,
   BitrixDocumentResult,
   BitrixEventHandler,
+  BitrixMember,
   BitrixSafeDocument,
-  BitrixUser
+  BitrixUser,
+  SendBitrixDocumentInput
 } from './bitrix.types';
 import { TokenCryptoService } from './token-crypto.service';
 
@@ -172,6 +175,40 @@ export class BitrixService {
     return this.call<BitrixDocumentResult>('sign.b2e.document.get', { uid, language: 'pt' });
   }
 
+  listCompanyProviders(companyCrmId: number) {
+    return this.call<BitrixCompanyProvider[]>('sign.b2e.company.provider.list', {
+      companyCrmId,
+      language: 'pt',
+      limit: 100,
+      offset: 0
+    });
+  }
+
+  sendDocument(input: SendBitrixDocumentInput) {
+    return this.call<BitrixDocumentResult>('sign.b2e.document.send', {
+      fields: {
+        company: { crmId: input.companyCrmId },
+        members: [
+          { userId: input.signerUserId, role: 'signer' },
+          { userId: input.representativeUserId, role: 'assignee' }
+        ],
+        responsible: { userId: input.responsibleUserId },
+        companyProviderUid: input.companyProviderUid,
+        files: [{
+          fileName: input.fileName,
+          fileType: 'application/pdf',
+          fileContent: input.pdf.toString('base64')
+        }],
+        regionDocumentType: input.regionDocumentType,
+        externalSettings: {
+          externalId: input.externalId,
+          externalDateCreate: input.externalDateCreate.toISOString()
+        }
+      },
+      language: 'pt'
+    });
+  }
+
   listSafeDocuments(limit = 50, offset = 0) {
     return this.call<BitrixSafeDocument[]>('sign.b2e.mysafe.tail', { limit, offset });
   }
@@ -182,6 +219,21 @@ export class BitrixService {
 
   listBoundEvents(accessToken: string, clientEndpoint: string) {
     return this.callWithToken<BitrixEventHandler[]>(clientEndpoint, accessToken, 'event.get');
+  }
+
+  async ensureEventHandlers(events: string[], handler: string) {
+    const bound = await this.call<BitrixEventHandler[]>('event.get');
+    const registered: string[] = [];
+    for (const event of events) {
+      const exists = (bound || []).some((item) =>
+        item.event.toLowerCase() === event.toLowerCase()
+        && item.handler.replace(/\/$/, '') === handler.replace(/\/$/, '')
+      );
+      if (exists) continue;
+      await this.call<boolean>('event.bind', { event, handler });
+      registered.push(event);
+    }
+    return registered;
   }
 
   private refreshInstallation(installation: BitrixInstallation) {
@@ -245,6 +297,30 @@ export class BitrixService {
     }
     if (method === 'user.current') return LOCAL_BITRIX_USERS[0];
     if (method === 'im.notify.personal.add') return Date.now();
+    if (method === 'sign.b2e.company.provider.list') {
+      return [{
+        code: 'local',
+        uid: 'local-bitrix-provider',
+        name: 'Bitrix24 local'
+      }];
+    }
+    if (method === 'sign.b2e.document.send') {
+      const fields = params.fields as {
+        members?: Array<{ userId: number; role: BitrixMember['role'] }>;
+      };
+      const uid = `local-bitrix-${Date.now()}`;
+      return {
+        uid,
+        state: { code: 'sent', name: 'Enviado' },
+        members: (fields.members || []).map((member, index) => ({
+          uid: `${uid}-${member.role}`,
+          role: member.role,
+          party: index,
+          user: { userId: member.userId },
+          state: { code: 'waiting', name: 'Aguardando' }
+        }))
+      };
+    }
     if (method === 'event.bind') return true;
     if (method === 'event.get') return [];
     throw new Error(`Metodo Bitrix24 ${method} nao simulado no modo local`);

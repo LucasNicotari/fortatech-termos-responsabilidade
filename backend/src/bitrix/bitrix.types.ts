@@ -50,6 +50,27 @@ export interface BitrixDocumentResult {
   members: BitrixMember[];
 }
 
+export interface BitrixCompanyProvider {
+  code: string;
+  uid: string;
+  name: string;
+  date?: string | null;
+  expires?: string | null;
+}
+
+export interface SendBitrixDocumentInput {
+  companyCrmId: number;
+  signerUserId: number;
+  representativeUserId: number;
+  responsibleUserId: number;
+  companyProviderUid: string;
+  fileName: string;
+  pdf: Buffer;
+  regionDocumentType: string;
+  externalId: string;
+  externalDateCreate: Date;
+}
+
 export interface BitrixSafeDocument {
   id: number;
   title: string;

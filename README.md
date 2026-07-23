@@ -8,10 +8,11 @@ Aplicativo interno da Forta Tech, incorporado ao Bitrix24, para preparar, revisa
 2. Seleciona um colaborador ativo; nome, e-mail, cargo, departamento e foto vêm do perfil do Bitrix24.
 3. Confere os dados, informa o CPF e registra os equipamentos entregues.
 4. O backend preenche o DOCX, converte-o para PDF e disponibiliza uma prévia privada por cinco minutos.
-5. Depois da revisão, a ZapSign envia o link de assinatura somente ao colaborador.
-6. O colaborador confirma o token recebido por e-mail e desenha a própria assinatura.
-7. Os usuários marcados para receber notificações são avisados no Bitrix24; eles não assinam o termo.
-8. O PDF concluído é salvo no bucket privado do Supabase e identificado por SHA-256.
+5. Depois da revisão, o backend cria a solicitação no e-Signature for HR do Bitrix24.
+6. O representante autorizado da empresa revisa, envia e confirma a assinatura no aplicativo móvel do Bitrix24.
+7. O Bitrix24 libera o documento ao colaborador, que assina dentro do fluxo nativo.
+8. Os usuários marcados para receber notificações acompanham o envio e a conclusão sem participar da assinatura.
+9. O PDF concluído é recuperado do Cofre da empresa, salvo no bucket privado do Supabase e identificado por SHA-256.
 
 Lucas e Osmar podem operar o fluxo inicial. Nicoly e Marcelo recebem notificações. Essas atribuições são editáveis em **Configurações > Usuários e acessos**.
 
@@ -21,7 +22,7 @@ Lucas e Osmar podem operar o fluxo inicial. Nicoly e Marcelo recebem notificaç�
 - NestJS, Prisma e PostgreSQL/Supabase no backend.
 - OAuth e REST do Bitrix24 para identidade, pessoas, departamentos e notificações.
 - Docxtemplater e LibreOffice headless para DOCX e PDF.
-- ZapSign Sandbox para a assinatura individual de homologação.
+- Bitrix24 e-Signature for HR para envio, assinatura e Cofre da empresa.
 - Supabase Storage privado para templates, prévias e documentos concluídos.
 - Docker Compose para desenvolvimento e Render para HTTPS público.
 
@@ -53,9 +54,8 @@ Copie `.env.example` para `.env`. Nunca envie o `.env` ao Git ou ao chat.
 
 - Supabase: `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
 - Segurança: `JWT_SECRET`, `BITRIX_TOKEN_ENCRYPTION_KEY`.
-- Bitrix24: `BITRIX_CLIENT_ID`, `BITRIX_CLIENT_SECRET`, `BITRIX_PORTAL_ORIGIN`.
+- Bitrix24: `BITRIX_CLIENT_ID`, `BITRIX_CLIENT_SECRET`, `BITRIX_PORTAL_ORIGIN`, `BITRIX_SIGN_COMPANY_CRM_ID`.
 - URLs: `PUBLIC_BACKEND_URL`, `FRONTEND_URL`, `CORS_ORIGINS`, `VITE_API_URL`.
-- ZapSign: `ZAPSIGN_API_URL`, `ZAPSIGN_API_TOKEN`, `ZAPSIGN_WEBHOOK_SECRET`.
 
 Nenhum segredo pode usar prefixo `VITE_`. As listas de operadores e notificados do ambiente são apenas valores iniciais; depois da instalação, as escolhas persistem no banco.
 
@@ -81,7 +81,7 @@ npm.cmd run test:local
 - [Testes por Cloudflare Tunnel](docs/local-cloudflare-tests.md)
 - [Banco de dados](docs/database.md)
 - [Supabase](docs/supabase.md)
-- [ZapSign Sandbox](docs/zapsign-sandbox.md)
+- [Assinatura nativa Bitrix24](docs/bitrix-signature.md)
 - [Segurança e operação](docs/security-operations.md)
 - [Revisão jurídica](docs/legal-review-checklist.md)
 - [Otimização das imagens Docker](docs/docker-optimization-report.md)

@@ -36,14 +36,8 @@ services:
         value: "8243,8465"
       - key: BITRIX_TERM_NOTIFICATION_USER_IDS
         value: "7718,8137"
-      - key: SIGNATURE_PROVIDER
-        value: zapsign
-      - key: ZAPSIGN_API_URL
-        value: https://sandbox.api.zapsign.com.br/api/v1
-      - key: ZAPSIGN_API_TOKEN
-        sync: false
-      - key: ZAPSIGN_WEBHOOK_SECRET
-        sync: false
+      - key: BITRIX_SIGN_COMPANY_CRM_ID
+        value: "67539"
       - key: PUBLIC_BACKEND_URL
         value: https://fortatech-termos-api-hml.onrender.com
       - key: FRONTEND_URL

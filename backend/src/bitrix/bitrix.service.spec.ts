@@ -101,6 +101,51 @@ describe('BitrixService sign.b2e', () => {
     );
   });
 
+  it('sends the PDF with signer, representative and responsible through native B2E', async () => {
+    const service = new BitrixService({} as never, {} as never, {} as never, {} as never, {} as never);
+    const call = jest.spyOn(service, 'call').mockResolvedValue({
+      uid: 'document-uid',
+      state: { code: 'sent', name: 'Enviado' },
+      members: []
+    });
+
+    await service.sendDocument({
+      companyCrmId: 67539,
+      signerUserId: 10,
+      representativeUserId: 20,
+      responsibleUserId: 30,
+      companyProviderUid: 'provider-uid',
+      fileName: 'TR.Colaborador_Teste.pdf',
+      pdf: Buffer.from('%PDF-test'),
+      regionDocumentType: '12.999',
+      externalId: 'request-1',
+      externalDateCreate: new Date('2026-07-23T12:00:00.000Z')
+    });
+
+    expect(call).toHaveBeenCalledWith('sign.b2e.document.send', {
+      fields: {
+        company: { crmId: 67539 },
+        members: [
+          { userId: 10, role: 'signer' },
+          { userId: 20, role: 'assignee' }
+        ],
+        responsible: { userId: 30 },
+        companyProviderUid: 'provider-uid',
+        files: [{
+          fileName: 'TR.Colaborador_Teste.pdf',
+          fileType: 'application/pdf',
+          fileContent: Buffer.from('%PDF-test').toString('base64')
+        }],
+        regionDocumentType: '12.999',
+        externalSettings: {
+          externalId: 'request-1',
+          externalDateCreate: '2026-07-23T12:00:00.000Z'
+        }
+      },
+      language: 'pt'
+    });
+  });
+
   it('coalesces concurrent OAuth refreshes and rotates both tokens', async () => {
     const expired = {
       id: 'installation-1', memberId: 'member-1', active: true,

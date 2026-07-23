@@ -62,8 +62,6 @@ SUPABASE_URL
 SUPABASE_SECRET_KEY
 BITRIX_CLIENT_ID
 BITRIX_CLIENT_SECRET
-ZAPSIGN_API_TOKEN
-ZAPSIGN_WEBHOOK_SECRET
 ```
 
 O Blueprint gera `JWT_SECRET` e `BITRIX_TOKEN_ENCRYPTION_KEY`. Em serviço já criado, uma nova variável marcada como `sync: false` precisa ser preenchida manualmente no painel do Render; o Blueprint não inventa nem copia o segredo.
@@ -88,17 +86,23 @@ Permissões necessárias para o fluxo atual:
 user_basic
 department
 im
+crm
+sign.b2e
 ```
 
 - `user_basic`: identidade, perfil básico e e-mail dos colaboradores, sem permissão para alterá-los;
 - `department`: converte `UF_DEPARTMENT` no nome do departamento;
 - `im`: envia notificações pessoais aos usuários selecionados.
+- `crm`: identifica a empresa que envia o documento;
+- `sign.b2e`: cria, consulta e acompanha a assinatura nativa.
 
-`crm` e `sign.b2e` não são usados pelo fluxo final e podem ser retirados. O instalador tenta registrar apenas `OnAppInstall` e `OnAppUninstall`. Esses eventos de ciclo de vida são opcionais para o fluxo ZapSign: uma falha fica registrada nos logs, mas não impede a conclusão da instalação.
+O instalador registra eventos de ciclo de vida e os eventos `OnSignB2eDocumentStatusChanged` e `OnSignB2eMemberStatusChanged`. A tela de configuração também tenta registrar os dois eventos B2E ausentes, portanto não é necessário reinstalar o aplicativo apenas para renovar os handlers quando o token já possui os escopos corretos.
 
 Referências oficiais: [`user.get`](https://apidocs.bitrix24.com/api-reference/user/user-get.html),
 [`department.get`](https://apidocs.bitrix24.com/api-reference/departments/department-get.html) e
-[`im.notify.personal.add`](https://apidocs.bitrix24.com/api-reference/chats/notifications/im-notify-personal-add.html).
+[`im.notify.personal.add`](https://apidocs.bitrix24.com/api-reference/chats/notifications/im-notify-personal-add.html),
+[`sign.b2e.document.send`](https://apidocs.bitrix24.com/api-reference/sign/sign-b2e-document-send.html) e
+[`sign.b2e.company.provider.list`](https://apidocs.bitrix24.com/api-reference/sign/sign-b2e-company-provider-list.html).
 
 Procedimento:
 
@@ -111,32 +115,15 @@ Procedimento:
 
 A instalação precisa ser feita pela sessão administrativa do portal; ela não pode ser automatizada pelo servidor porque é o Bitrix24 que emite e entrega o OAuth inicial.
 
-## 5. ZapSign Sandbox
+## 5. Assinatura Bitrix24
 
-No Render:
+1. abra **Configurações > Usuários e acessos**;
+2. em **Assinatura Bitrix24**, selecione o representante formalmente autorizado;
+3. confirme a empresa `FORTA TECH · CRM 67539`;
+4. confira se o provedor foi localizado;
+5. clique em **Salvar**.
 
-```text
-SIGNATURE_PROVIDER=zapsign
-ZAPSIGN_API_URL=https://sandbox.api.zapsign.com.br/api/v1
-ZAPSIGN_API_TOKEN=<segredo do Sandbox>
-ZAPSIGN_WEBHOOK_SECRET=<segredo aleatório forte>
-```
-
-Na ZapSign Sandbox, configure a URL permanente:
-
-```text
-https://fortatech-termos-api-hml.onrender.com/integrations/zapsign/events
-```
-
-Eventos: `doc_signed` e `doc_refused`.
-
-Header:
-
-```text
-Authorization: Bearer <mesmo ZAPSIGN_WEBHOOK_SECRET>
-```
-
-Depois de salvar, reimplante/reinicie o backend e confirme em **Novo termo** que o provedor aparece configurado e que o ambiente é `sandbox`.
+Se o provedor não aparecer, confira se o instalador possui permissão para criar documentos B2E e se os escopos `crm` e `sign.b2e` foram concedidos. Alterar escopos exige salvar e reinstalar o aplicativo local para o Bitrix24 emitir um novo OAuth.
 
 ## 6. Teste final autorizado
 
@@ -148,12 +135,13 @@ Destino: `lucas.nicotari@fortatech.com.br`.
 4. inclua ao menos dois equipamentos fictícios;
 5. gere a prévia e confirme os títulos centralizados, nome, CPF e itens;
 6. envie uma única vez;
-7. confirme recebimento do e-mail da ZapSign;
-8. abra o link, informe o token e desenhe a assinatura de teste;
-9. confirme o estado concluído no FortaDocs;
-10. valide que notificados receberam aviso no Bitrix24;
-11. confira `ARCHIVED`, tamanho, caminho privado e SHA-256 do PDF final;
-12. confira que reentrega do webhook não cria duplicação.
+7. confirme que o representante recebeu a mensagem do HR bot;
+8. o representante revisa o documento e confirma a assinatura no aplicativo móvel do Bitrix24;
+9. confirme que a solicitação foi liberada ao colaborador e conclua a assinatura de teste no Bitrix24;
+10. confirme o estado concluído no FortaDocs;
+11. valide que notificados receberam aviso no Bitrix24;
+12. confira `ARCHIVED`, tamanho, caminho privado e SHA-256 do PDF final;
+13. confira que reentrega do evento não cria duplicação.
 
 ## 7. Evidências de liberação
 
@@ -161,9 +149,9 @@ Destino: `lucas.nicotari@fortatech.com.br`.
 - `/health` em 200;
 - migrations sem pendência;
 - instalação Bitrix ativa no Supabase;
-- provedor ZapSign com token e webhook configurados;
+- empresa, provedor e representante Bitrix24 configurados;
 - ID do termo de teste e horários de envio/assinatura;
-- e-mail entregue, sem registrar o token;
+- assinaturas do representante e do colaborador concluídas no Bitrix24;
 - PDF final privado e hash correspondente;
 - logs sem CPF, chaves ou conteúdo do documento.
 

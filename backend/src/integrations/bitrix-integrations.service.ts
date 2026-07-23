@@ -72,9 +72,12 @@ export class BitrixIntegrationsService {
       const handler = `${publicUrl.replace(/\/$/, '')}/integrations/bitrix/events`;
       try {
         const boundEvents = await this.bitrix.listBoundEvents(auth.access_token, auth.client_endpoint);
-        // O fluxo oficial usa a ZapSign para a assinatura. Registrar apenas os
-        // eventos de ciclo de vida evita exigir o escopo legado sign.b2e.
-        for (const event of ['OnAppInstall', 'OnAppUninstall']) {
+        for (const event of [
+          'OnAppInstall',
+          'OnAppUninstall',
+          'OnSignB2eDocumentStatusChanged',
+          'OnSignB2eMemberStatusChanged'
+        ]) {
           const alreadyBound = (boundEvents || []).some((item) =>
             item.event.toLowerCase() === event.toLowerCase() &&
             item.handler.replace(/\/$/, '') === handler.replace(/\/$/, '')

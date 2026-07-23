@@ -14,6 +14,7 @@ import { LogsService } from '../logs/logs.service';
 import { TermNotificationsService } from '../notifications/term-notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { BitrixSignatureService } from '../signature-providers/bitrix-signature.service';
 import { ZapSignService } from '../signature-providers/zapsign.service';
 import { CreateSendRequestDto, UpdateSendRequestDto } from './dto/create-send-request.dto';
 
@@ -26,6 +27,7 @@ export class SendRequestsService {
     private readonly storage: StorageService,
     private readonly logs: LogsService,
     private readonly zapSign: ZapSignService,
+    private readonly bitrixSignature: BitrixSignatureService,
     private readonly notifications: TermNotificationsService
   ) {}
 
@@ -185,7 +187,12 @@ export class SendRequestsService {
   async send(id: string) {
     const request = await this.prisma.sendRequest.findUnique({
       where: { id },
-      include: { employee: true, attempts: true, templateVersion: { include: { template: true } } }
+      include: {
+        employee: true,
+        requestedBy: true,
+        attempts: true,
+        templateVersion: { include: { template: true } }
+      }
     });
     if (!request) throw new NotFoundException('Solicitacao de envio nao encontrada');
     if (request.status !== SendRequestStatus.READY || !request.unsignedStoragePath || !request.documentFileName) {
@@ -207,43 +214,77 @@ export class SendRequestsService {
     try {
       const pdf = await this.storage.download(request.unsignedStoragePath);
       const snapshot = request.employeeSnapshot as Record<string, unknown>;
-      const observers = await this.notifications.recipientEmails();
-      const result = await this.zapSign.createDocument({
-        externalId: id,
+      if (this.zapSign.isLocalMode()) {
+        return this.sendLocalSimulation(request, attempt.id, pdf, snapshot);
+      }
+      const settings = await this.bitrixSignature.requireSettings();
+      const signerUserId = Number(request.employee.bitrixId);
+      if (!Number.isInteger(signerUserId) || signerUserId <= 0) {
+        throw new BadRequestException('O colaborador precisa estar vinculado a um usuário do Bitrix24');
+      }
+      const requestedByBitrixId = Number(request.requestedBy?.bitrixUserId);
+      const responsibleUserId = Number.isInteger(requestedByBitrixId) && requestedByBitrixId > 0
+        ? requestedByBitrixId
+        : settings.representativeUserId;
+      const result = await this.bitrix.sendDocument({
+        companyCrmId: settings.companyCrmId,
+        signerUserId,
+        representativeUserId: settings.representativeUserId,
+        responsibleUserId,
+        companyProviderUid: settings.providerUid,
         fileName: request.documentFileName,
         pdf,
-        signer: {
-          externalId: request.employee.bitrixId || request.employeeId,
-          name: String(snapshot.name || request.employee.nome),
-          email: String(snapshot.email || request.employee.email),
-          cpf: String(snapshot.cpf || request.employee.cpf || '')
-        },
-        observers
+        regionDocumentType: settings.regionDocumentType,
+        externalId: id,
+        externalDateCreate: request.requestedAt
       });
+      const signer = result.members?.find((member) => member.role === 'signer');
+      const assignee = result.members?.find((member) => member.role === 'assignee');
       const signature = await this.prisma.signature.create({
         data: {
           sendRequestId: id,
           employeeId: request.employeeId,
           templateVersionId: request.templateVersionId,
-          provider: SignatureProvider.ZAPSIGN,
-          providerDocumentId: result.token,
+          provider: SignatureProvider.BITRIX,
+          providerDocumentId: result.uid,
+          bitrixDocumentUid: result.uid,
+          signerMemberUid: signer?.uid,
+          assigneeMemberUid: assignee?.uid,
           status: SignatureStatus.SENT,
-          rawStatusCode: result.status,
-          bitrixStage: 'Aguardando assinatura do colaborador',
+          rawStatusCode: result.state?.code || 'sent',
+          bitrixStage: result.state?.name || 'Aguardando assinatura do representante',
           sentAt: new Date(),
           lastSyncedAt: new Date(),
           archiveStatus: ArchiveStatus.NOT_REQUIRED
         }
       });
       await this.prisma.signatureEvent.create({
-        data: { signatureId: signature.id, eventType: 'ZAPSIGN_SENT', status: SignatureStatus.SENT, bitrixStage: result.status }
+        data: {
+          signatureId: signature.id,
+          eventType: 'BITRIX_SENT',
+          status: SignatureStatus.SENT,
+          bitrixStage: result.state?.code || 'sent',
+          payload: this.toJson({
+            uid: result.uid,
+            state: result.state,
+            members: result.members?.map((member) => ({
+              uid: member.uid,
+              role: member.role,
+              state: member.state
+            }))
+          })
+        }
       });
       await this.prisma.sendAttempt.update({
         where: { id: attempt.id },
         data: {
           status: SendAttemptStatus.SUCCESS,
           finishedAt: new Date(),
-          providerResponse: this.toJson({ provider: 'ZAPSIGN', documentToken: result.token, status: result.status })
+          providerResponse: this.toJson({
+            provider: 'BITRIX',
+            documentUid: result.uid,
+            status: result.state?.code
+          })
         }
       });
       const updatedRequest = await this.prisma.sendRequest.update({
@@ -262,6 +303,67 @@ export class SendRequestsService {
       await this.prisma.sendRequest.update({ where: { id }, data: { status: SendRequestStatus.FAILED, failureReason: message } });
       throw error;
     }
+  }
+
+  private async sendLocalSimulation(
+    request: {
+      id: string;
+      documentFileName: string | null;
+      templateVersionId: string | null;
+      employee: { id: string; bitrixId: string | null; nome: string; email: string; cpf: string | null };
+    },
+    attemptId: string,
+    pdf: Buffer,
+    snapshot: Record<string, unknown>
+  ) {
+    const result = await this.zapSign.createDocument({
+      externalId: request.id,
+      fileName: request.documentFileName!,
+      pdf,
+      signer: {
+        externalId: request.employee.bitrixId || request.employee.id,
+        name: String(snapshot.name || request.employee.nome),
+        email: String(snapshot.email || request.employee.email),
+        cpf: String(snapshot.cpf || request.employee.cpf || '')
+      },
+      observers: []
+    });
+    const signature = await this.prisma.signature.create({
+      data: {
+        sendRequestId: request.id,
+        employeeId: request.employee.id,
+        templateVersionId: request.templateVersionId,
+        provider: SignatureProvider.ZAPSIGN,
+        providerDocumentId: result.token,
+        status: SignatureStatus.SENT,
+        rawStatusCode: result.status,
+        bitrixStage: 'Simulação local aguardando colaborador',
+        sentAt: new Date(),
+        lastSyncedAt: new Date(),
+        archiveStatus: ArchiveStatus.NOT_REQUIRED
+      }
+    });
+    await this.prisma.signatureEvent.create({
+      data: {
+        signatureId: signature.id,
+        eventType: 'LOCAL_SENT',
+        status: SignatureStatus.SENT,
+        bitrixStage: result.status
+      }
+    });
+    await this.prisma.sendAttempt.update({
+      where: { id: attemptId },
+      data: {
+        status: SendAttemptStatus.SUCCESS,
+        finishedAt: new Date(),
+        providerResponse: this.toJson({ provider: 'LOCAL', documentToken: result.token })
+      }
+    });
+    return this.prisma.sendRequest.update({
+      where: { id: request.id },
+      data: { status: SendRequestStatus.SENT, sentAt: new Date(), lockedAt: new Date() },
+      include: { employee: true, equipment: true, signatures: true }
+    });
   }
 
   async retry(id: string) {

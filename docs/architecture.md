@@ -2,7 +2,7 @@
 
 ## Visão geral
 
-O FortaDocs é uma aplicação web de servidor incorporada ao Bitrix24. O Bitrix24 fornece identidade, cadastro corporativo e notificações; a ZapSign executa a assinatura do colaborador; o Supabase guarda os dados e arquivos privados. O backend é a única camada autorizada a acessar segredos e recursos privilegiados.
+O FortaDocs é uma aplicação web de servidor incorporada ao Bitrix24. O Bitrix24 fornece identidade, cadastro corporativo, notificações, assinatura B2E e o Cofre da empresa; o Supabase guarda os dados e cópias privadas dos arquivos. O backend é a única camada autorizada a acessar segredos e recursos privilegiados.
 
 ```mermaid
 flowchart LR
@@ -10,6 +10,8 @@ flowchart LR
     OP[Operador RH ou TI]
     DIR[Usuários, fotos e departamentos]
     NOTIF[Notificações pessoais]
+    B2E[e-Signature for HR]
+    SAFE[Cofre da empresa]
   end
 
   subgraph RENDER[Render HTTPS]
@@ -23,12 +25,7 @@ flowchart LR
     STORE[(Storage privado\nresponsibility-terms)]
   end
 
-  subgraph SIGN[ZapSign Sandbox]
-    ZAPI[API de documentos]
-    MAIL[E-mail e token]
-    HOOK[Webhook assinado/recusado]
-  end
-
+  REP[Representante autorizado]
   COL[Colaborador signatário]
 
   OP -->|abre no iframe| WEB
@@ -39,10 +36,14 @@ flowchart LR
   API <-->|URLs temporárias e arquivos| STORE
   API --> DOC
   DOC -->|PDF revisado| STORE
-  API -->|PDF + 1 signatário| ZAPI
-  ZAPI --> MAIL --> COL
-  COL -->|token + assinatura desenhada| ZAPI
-  HOOK -->|Bearer compartilhado| API
+  API -->|PDF + representante + colaborador| B2E
+  B2E -->|aviso no Messenger| REP
+  REP -->|revisa e confirma no app móvel| B2E
+  B2E -->|libera a assinatura| COL
+  COL -->|assina no Bitrix24| B2E
+  B2E -->|eventos document/member| API
+  B2E --> SAFE
+  API -->|recupera PDF concluído| SAFE
   API -->|PDF final + SHA-256| STORE
 ```
 
@@ -57,7 +58,8 @@ sequenceDiagram
   participant API as Backend Render
   participant DB as Supabase PostgreSQL
   participant Storage as Supabase Storage
-  participant Zap as ZapSign Sandbox
+  participant Sign as Bitrix24 B2E
+  actor Representante
   actor Colaborador
   participant Avisados as Nicoly/Marcelo
 
@@ -83,13 +85,20 @@ sequenceDiagram
   Storage-->>Web: URL assinada por 5 minutos
   Operador->>Web: revisa e confirma envio
   Web->>API: POST /send-requests/:id/send
-  API->>Zap: cria documento, 1 signatário e e-mail automático
-  Zap-->>Colaborador: e-mail com link e token
+  API->>Sign: sign.b2e.document.send
+  Note over API,Sign: empresa + provedor + responsável + representante + colaborador + PDF
+  Sign-->>Representante: HR bot / item urgente
   API->>Bitrix: notifica envio aos usuários configurados
-  Bitrix-->>Avisados: aviso “aguardando assinatura”
-  Colaborador->>Zap: revisa, informa token e desenha assinatura
-  Zap->>API: POST /integrations/zapsign/events
-  API->>Zap: consulta o estado final
+  Bitrix-->>Avisados: aviso “aguardando representante”
+  Representante->>Sign: revisa e clica em Enviar documento
+  Representante->>Sign: confirma assinatura no aplicativo móvel
+  Sign-->>Colaborador: libera a solicitação de assinatura
+  Colaborador->>Sign: revisa e assina no Bitrix24
+  Sign->>API: OnSignB2eDocumentStatusChanged
+  Sign->>API: OnSignB2eMemberStatusChanged
+  API->>Sign: sign.b2e.document.get
+  Sign->>Bitrix: arquiva no Cofre da empresa
+  API->>Bitrix: consulta sign.b2e.mysafe.tail
   API->>Storage: baixa e arquiva signed/... + SHA-256
   API->>DB: status concluído e trilha de auditoria
   API->>Bitrix: notifica conclusão
@@ -103,13 +112,13 @@ stateDiagram-v2
   [*] --> DRAFT: operador cria
   DRAFT --> READY: PDF gerado e revisável
   READY --> SENDING: envio reivindicado atomicamente
-  SENDING --> SENT: ZapSign aceitou
+  SENDING --> SENT: Bitrix24 aceitou
   SENDING --> FAILED: falha técnica
   FAILED --> DRAFT: operador solicita nova tentativa
-  SENT --> VIEWED: colaborador abriu
-  SENT --> DECLINED: colaborador recusou
-  VIEWED --> FINISHED: colaborador assinou
-  SENT --> FINISHED: webhook final
+  SENT --> IN_PROGRESS: representante ou colaborador iniciou
+  SENT --> DECLINED: participante recusou
+  IN_PROGRESS --> FINISHED: representante e colaborador assinaram
+  SENT --> FINISHED: evento final
   FINISHED --> ARCHIVED: PDF validado e SHA-256 salvo
   FINISHED --> ARCHIVE_FAILED: falha no download ou Storage
   ARCHIVE_FAILED --> ARCHIVED: reprocessamento manual
@@ -124,7 +133,8 @@ stateDiagram-v2
 | Administrador | Libera acesso, define perfil, operadores, notificados e templates | Não assina automaticamente pelo colaborador |
 | Operador | Cria o rascunho, informa CPF/equipamentos, revisa e envia | Não altera um documento depois do envio |
 | Notificado | Recebe avisos de envio e conclusão no Bitrix24 | Não participa da assinatura |
-| Colaborador | Recebe o e-mail, autentica e desenha a própria assinatura | Não acessa o painel interno |
+| Representante | Revisa e assina em nome da empresa quando formalmente autorizado | Não pode ter a assinatura inserida automaticamente pelo FortaDocs |
+| Colaborador | Recebe a solicitação depois do representante e assina no Bitrix24 | Não acessa o painel interno do FortaDocs |
 | Backend | Orquestra OAuth, PDF, assinatura, arquivo e auditoria | Não expõe chaves ao navegador |
 
 Uma pessoa pode acumular perfil administrativo, operação e notificações. **Acessar o FortaDocs**, **Perfil e Setor**, **Gerenciar Termos** e **Receber Notificações** são controles independentes.
@@ -134,8 +144,8 @@ Uma pessoa pode acumular perfil administrativo, operação e notificações. **A
 - O iframe aceita somente `https://fortaeqt.bitrix24.com.br`.
 - O código de abertura é de uso único, armazenado como hash e expira em dois minutos.
 - Tokens OAuth do Bitrix24 são cifrados com `BITRIX_TOKEN_ENCRYPTION_KEY`.
-- A ZapSign recebe apenas o PDF e os dados necessários do único signatário.
-- Webhooks ZapSign exigem `Authorization: Bearer <segredo>` e são deduplicados.
+- O Bitrix24 recebe o PDF e os identificadores dos participantes por OAuth com escopos `crm` e `sign.b2e`.
+- Eventos B2E são validados pelo `application_token` do aplicativo e deduplicados.
 - `anon` e `authenticated` não possuem DML nas tabelas `app_*`; o Prisma acessa PostgreSQL no servidor.
 - O bucket é privado; URLs de download expiram em cinco minutos.
 - O PDF final é validado pelo cabeçalho, limitado em tamanho e registrado com SHA-256.

@@ -118,7 +118,12 @@ describe('BitrixIntegrationsService installation', () => {
       }
     };
     const handler = 'https://backend.example.com/integrations/bitrix/events';
-    const events = ['OnAppInstall', 'OnAppUninstall'];
+    const events = [
+      'OnAppInstall',
+      'OnAppUninstall',
+      'OnSignB2eDocumentStatusChanged',
+      'OnSignB2eMemberStatusChanged'
+    ];
     const bitrix = {
       getCurrentUser: jest.fn().mockResolvedValue({ ID: '1', NAME: 'Admin' }),
       listBoundEvents: jest.fn().mockResolvedValue(events.map((event) => ({ event: event.toUpperCase(), handler }))),
@@ -143,7 +148,7 @@ describe('BitrixIntegrationsService installation', () => {
     expect(bitrix.bindEvent).not.toHaveBeenCalled();
   });
 
-  it('registers only application lifecycle events for the ZapSign workflow', async () => {
+  it('registers lifecycle and native signature events', async () => {
     const prisma = {
       bitrixInstallation: { upsert: jest.fn().mockResolvedValue({ id: 'installation-1' }) },
       user: {
@@ -174,6 +179,11 @@ describe('BitrixIntegrationsService installation', () => {
       member_id: 'member-1', expires_in: 3600
     });
 
-    expect(bitrix.bindEvent.mock.calls.map(([event]) => event)).toEqual(['OnAppInstall', 'OnAppUninstall']);
+    expect(bitrix.bindEvent.mock.calls.map(([event]) => event)).toEqual([
+      'OnAppInstall',
+      'OnAppUninstall',
+      'OnSignB2eDocumentStatusChanged',
+      'OnSignB2eMemberStatusChanged'
+    ]);
   });
 });

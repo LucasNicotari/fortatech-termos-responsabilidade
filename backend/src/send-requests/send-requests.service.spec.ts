@@ -23,6 +23,7 @@ describe('SendRequestsService', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
       {} as never
     );
 

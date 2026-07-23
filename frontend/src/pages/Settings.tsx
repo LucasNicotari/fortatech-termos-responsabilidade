@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import type { ReactNode, UIEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, FilePenLine, FileText, History, Save, Search, Settings2, UserCheck } from 'lucide-react';
+import { Bell, Building2, FilePenLine, FileText, History, Save, Search, Settings2, ShieldCheck, UserCheck } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,6 +21,15 @@ interface WorkflowUser {
   role: UserRole;
   canOperate: boolean;
   receiveNotifications: boolean;
+}
+
+interface SignatureOptions {
+  companyCrmId: number;
+  regionDocumentType: string;
+  representativeUserId: number | null;
+  providerUid: string | null;
+  providers: Array<{ uid: string; code: string; name: string }>;
+  users: Array<{ id: number; name: string; email: string; photoUrl?: string }>;
 }
 
 const TemplatesTab = lazy(() => import('./Templates').then((module) => ({ default: module.Templates })));
@@ -114,7 +123,9 @@ function AccessSettings() {
   }
 
   return (
-    <section className="overflow-hidden rounded border border-b24-border bg-white">
+    <div className="grid gap-4">
+      <BitrixSignatureSettings />
+      <section className="overflow-hidden rounded border border-b24-border bg-white">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-b24-border px-4 py-3.5 sm:px-5">
         <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-50 text-b24-blue-dark"><UserCheck size={17} /></span><div className="min-w-0"><h2 className="font-semibold text-ink">Usuários do Bitrix24</h2><p className="truncate text-xs text-steel">Um único lugar para consultar o perfil e definir todas as permissões.</p></div></div>
         <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-b24-border px-3 py-2 sm:max-w-80"><Search size={16} className="shrink-0 text-steel" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, cargo, setor ou ID" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label>
@@ -148,6 +159,69 @@ function AccessSettings() {
         <span className="text-xs text-steel">{filteredAssignments.length} usuários ativos</span>
         {save.isSuccess && <p role="status" className="text-sm font-medium text-emerald-700">Configurações atualizadas.</p>}
         {save.isError && <p role="alert" className="text-sm font-medium text-coral">Não foi possível salvar as configurações.</p>}
+      </div>
+      </section>
+    </div>
+  );
+}
+
+function BitrixSignatureSettings() {
+  const queryClient = useQueryClient();
+  const [representativeUserId, setRepresentativeUserId] = useState('');
+  const options = useQuery({
+    queryKey: ['bitrix-signature-options'],
+    queryFn: async () => (await api.get<SignatureOptions>('/signature-provider/options')).data,
+    retry: false
+  });
+  useEffect(() => {
+    if (options.data?.representativeUserId) {
+      setRepresentativeUserId(String(options.data.representativeUserId));
+    }
+  }, [options.data?.representativeUserId]);
+  const save = useMutation({
+    mutationFn: () => api.put<SignatureOptions>('/signature-provider/settings', {
+      representativeUserId: Number(representativeUserId)
+    }),
+    onSuccess: ({ data }) => {
+      queryClient.setQueryData(['bitrix-signature-options'], data);
+      queryClient.invalidateQueries({ queryKey: ['signature-provider-status'] });
+    }
+  });
+  const provider = options.data?.providers.find((item) => item.uid === options.data?.providerUid)
+    || options.data?.providers[0];
+
+  return (
+    <section className="rounded border border-b24-border bg-white">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600"><ShieldCheck size={17} /></span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold text-ink">Assinatura Bitrix24</h2>
+          <p className="text-xs text-steel">Defina uma vez quem assina pela empresa. O operador que enviar será o responsável pelo termo.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded bg-b24-bg px-3 py-2 text-xs text-steel">
+          <Building2 size={15} />
+          <span>FORTA TECH · CRM {options.data?.companyCrmId || 67539}</span>
+        </div>
+      </div>
+      <div className="grid gap-3 border-t border-b24-border px-4 py-3 sm:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_auto] sm:items-end sm:px-5">
+        <label className="grid gap-1 text-xs text-steel">
+          <span>Representante autorizado da empresa</span>
+          <select value={representativeUserId} onChange={(event) => { setRepresentativeUserId(event.target.value); save.reset(); }} disabled={options.isLoading || options.isError} className="focus-ring min-h-9 rounded border border-b24-border bg-white px-3 py-2 text-sm text-ink disabled:bg-zinc-100">
+            <option value="">Selecione</option>
+            {(options.data?.users || []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>
+        <div className="grid gap-1 text-xs text-steel">
+          <span>Provedor</span>
+          <div className="min-h-9 rounded border border-b24-border bg-b24-bg px-3 py-2 text-sm text-ink">{provider?.name || (options.isLoading ? 'Validando...' : 'Não disponível')}</div>
+        </div>
+        <button disabled={!representativeUserId || save.isPending || options.isError} onClick={() => save.mutate()} className="focus-ring inline-flex min-h-9 items-center justify-center gap-2 rounded bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50"><Save size={16} /> {save.isPending ? 'Salvando...' : 'Salvar'}</button>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-b24-border bg-b24-bg/40 px-4 py-2 text-[11px] text-steel sm:px-5">
+        <span>O representante deve ter autorização interna para assinar pela empresa.</span>
+        <span>A confirmação final é feita pelo aplicativo móvel do Bitrix24.</span>
+        {save.isSuccess && <strong className="text-emerald-700">Configuração pronta.</strong>}
+        {(options.isError || save.isError) && <strong className="text-coral">Não foi possível validar. Confirme os escopos CRM e e-Signature for HR.</strong>}
       </div>
     </section>
   );
