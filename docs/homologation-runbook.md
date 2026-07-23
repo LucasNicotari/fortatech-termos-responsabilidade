@@ -123,7 +123,7 @@ Destino autorizado: `lucas.nicotari@fortatech.com.br`.
 - commit e deploy identificados;
 - `/health` e frontend em HTTP 200;
 - sete migrations aplicadas;
-- 52 testes automatizados aprovados;
+- 54 testes automatizados aprovados;
 - lint e builds aprovados;
 - escopos `im` e `placement` validados;
 - envio ao chat e abertura `REST_APP_URI` comprovados;

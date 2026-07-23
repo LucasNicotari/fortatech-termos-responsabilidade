@@ -46,6 +46,7 @@ https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/install
 2. O operador escolhe zero ou mais pessoas a notificar. Nao existe limite fixo no FortaDocs.
 3. A API gera o PDF, grava-o no bucket privado e cria um convite aleatorio valido por sete dias.
 4. Apenas o SHA-256 do token do convite fica no banco.
+   Textos técnicos de log mascaram automaticamente qualquer `params[signing]`.
 5. A API registra o manipulador `REST_APP_URI`, se ainda nao estiver registrado.
 6. `im.message.add` envia ao chat do colaborador um link no formato:
 

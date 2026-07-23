@@ -102,6 +102,12 @@ export class LogsService {
     if (Array.isArray(value)) {
       return value.map((item) => this.redact(item));
     }
+    if (typeof value === 'string') {
+      return value.replace(
+        /((?:params(?:%5B|\[)signing(?:%5D|\])|launchCode|access_token|refresh_token|application_token)=)[A-Za-z0-9._~-]{16,}/gi,
+        '$1[REDACTED]'
+      );
+    }
     if (!value || typeof value !== 'object') {
       return value;
     }
