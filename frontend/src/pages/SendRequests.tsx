@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Check, ChevronLeft, ChevronRight, ExternalLink, Eye, Pencil, Plus, Search, Send, Trash2, UserRound, Package, X } from 'lucide-react';
+import { Bell, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Eye, Pencil, Plus, Search, Send, Trash2, UserRound, Package, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { BitrixEmployee, Equipment, SendRequest } from '../types';
@@ -34,8 +34,6 @@ export function SendRequests() {
   const [cpf, setCpf] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [department, setDepartment] = useState('');
-  const [editingName, setEditingName] = useState(false);
-  const [editingEmail, setEditingEmail] = useState(false);
   const [equipment, setEquipment] = useState<Equipment[]>([emptyEquipment()]);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -72,8 +70,9 @@ export function SendRequests() {
       let requestId = draftId;
       if (!requestId) {
         const { data: request } = await api.post<SendRequest>('/send-requests', {
-          employeeBitrixUserId: Number(employeeId), employeeName: name, employeeEmail: email,
-          cpf, cargo: jobTitle, departamento: department, equipment,
+          employeeBitrixUserId: Number(employeeId), employeeName: name,
+          employeeEmail: email || undefined, cpf, cargo: jobTitle,
+          departamento: department || undefined, equipment,
           notificationRecipientBitrixUserIds: notificationIds.map(Number)
         });
         requestId = request.id;
@@ -99,8 +98,6 @@ export function SendRequests() {
       setEmail('');
       setJobTitle('');
       setDepartment('');
-      setEditingName(false);
-      setEditingEmail(false);
       setCpf('');
       setEquipment([emptyEquipment()]);
       setNotificationIds((workflowQuery.data || [])
@@ -132,8 +129,6 @@ export function SendRequests() {
     setEmail(employee?.EMAIL || '');
     setJobTitle(employee?.WORK_POSITION || '');
     setDepartment(employee?.DEPARTMENT_NAME || '');
-    setEditingName(false);
-    setEditingEmail(false);
     resetDocumentState();
   }
 
@@ -152,8 +147,7 @@ export function SendRequests() {
   const providerReady = providerQuery.data?.configured;
   const error = prepare.error || send.error;
   const cpfComplete = cpf.replace(/\D/g, '').length === 11;
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const employeeComplete = Boolean(employeeId && name.trim() && emailValid && cpfComplete && department.trim());
+  const employeeComplete = Boolean(employeeId && name.trim() && cpfComplete);
   const equipmentComplete = equipment.every((item) => item.quantity >= 1 && item.description.trim());
   const selectedEmployee = employees.find((employee) => employee.ID === employeeId);
   const departmentHint = !employeeId || department
@@ -162,7 +156,7 @@ export function SendRequests() {
       ? 'Adicione a permissão Estrutura da empresa (department) ao aplicativo Bitrix24 e reinstale-o.'
       : selectedEmployee?.DEPARTMENT_LOOKUP_ERROR === 'LOOKUP_FAILED'
         ? 'Não foi possível consultar a estrutura da empresa no Bitrix24.'
-        : 'Departamento não localizado no perfil.';
+        : undefined;
 
   return (
     <section className="mx-auto max-w-[1280px]">
@@ -189,31 +183,12 @@ export function SendRequests() {
         <div className="p-4 sm:p-5">
           {step === 1 && (
             <div>
-              <SectionTitle icon={UserRound} title="Dados do colaborador" description="Nome, e-mail e departamento vêm do perfil do Bitrix24." />
+              <SectionTitle icon={UserRound} title="Dados do colaborador" description="Selecione o colaborador; e-mail e departamento vêm automaticamente do Bitrix24." />
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="grid gap-1 text-sm text-steel">
-                  <span>Colaborador <strong className="text-coral">*</strong></span>
-                  <span className="flex min-w-0 gap-2">
-                    {editingName ? (
-                      <input autoFocus className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink" value={name} onChange={(event) => { setName(event.target.value); resetDocumentState(); }} />
-                    ) : (
-                      <select className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink" value={employeeId} onChange={(event) => selectEmployee(event.target.value)}>
-                        <option value="">Selecione</option>
-                        {employees.map((employee) => <option key={employee.ID} value={employee.ID}>{[employee.NAME, employee.LAST_NAME].filter(Boolean).join(' ')}</option>)}
-                      </select>
-                    )}
-                    <EditButton editing={editingName} disabled={!employeeId} label="nome" onClick={() => setEditingName((value) => !value)} />
-                  </span>
-                </label>
+                <EmployeePicker employees={employees} value={employeeId} onSelect={selectEmployee} />
                 <Field label="CPF" required value={cpf} onChange={(value) => { setCpf(formatCpf(value)); resetDocumentState(); }} inputMode="numeric" placeholder="000.000.000-00" maxLength={14} />
-                <label className="grid gap-1 text-sm text-steel">
-                  <span>E-mail <strong className="text-coral">*</strong></span>
-                  <span className="flex min-w-0 gap-2">
-                    <input type="email" readOnly={!editingEmail} className="focus-ring min-w-0 flex-1 rounded border border-zinc-300 px-3 py-2 text-ink read-only:bg-zinc-100" value={email} onChange={(event) => { setEmail(event.target.value); resetDocumentState(); }} />
-                    <EditButton editing={editingEmail} disabled={!employeeId} label="e-mail" onClick={() => setEditingEmail((value) => !value)} />
-                  </span>
-                </label>
-                <Field label="Departamento" required value={department} readOnly hint={departmentHint} />
+                <Field label="E-mail" value={email} readOnly placeholder="Preenchido pelo Bitrix24" />
+                <Field label="Departamento" value={department} readOnly hint={departmentHint} placeholder="Não informado no Bitrix24" />
               </div>
               <StepFooter><span /><NextButton disabled={!employeeComplete} onClick={() => setStep(2)}>Continuar</NextButton></StepFooter>
             </div>
@@ -317,6 +292,97 @@ function SummaryCard({ title, lines, onEdit }: { title: string; lines: string[];
   return <article className="rounded-lg border border-b24-border bg-b24-bg/35 p-3.5"><div className="mb-2 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-ink">{title}</h3><button type="button" onClick={onEdit} className="focus-ring rounded p-1 text-b24-blue-dark hover:bg-sky-100" title="Editar"><Pencil size={15} /></button></div><div className="space-y-1">{lines.map((line, index) => <p key={`${line}-${index}`} className="truncate text-xs text-steel" title={line}>{line || '-'}</p>)}</div></article>;
 }
 
+function EmployeePicker({ employees, value, onSelect }: {
+  employees: BitrixEmployee[];
+  value: string;
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const container = useRef<HTMLDivElement>(null);
+  const selected = employees.find((employee) => employee.ID === value);
+  const selectedName = selected
+    ? [selected.NAME, selected.LAST_NAME].filter(Boolean).join(' ') || `Usuário ${selected.ID}`
+    : '';
+  const normalized = normalizeText(search);
+  const visible = employees.filter((employee) =>
+    !normalized || normalizeText(
+      `${employee.NAME || ''} ${employee.LAST_NAME || ''} ${employee.EMAIL || ''} ${employee.ID}`
+    ).includes(normalized)
+  ).slice(0, 10);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  return (
+    <div ref={container} className="relative grid gap-1 text-sm text-steel">
+      <span>Colaborador</span>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => {
+          if (!open) setSearch('');
+          setOpen((current) => !current);
+        }}
+        className="focus-ring flex min-w-0 items-center justify-between gap-2 rounded border border-zinc-300 bg-white px-3 py-2 text-left text-ink"
+      >
+        <span className={`truncate ${selectedName ? '' : 'text-zinc-400'}`}>{selectedName || 'Selecione um colaborador'}</span>
+        <ChevronDown size={16} className={`shrink-0 text-steel transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border border-b24-border bg-white p-2 shadow-lg">
+          <label className="flex h-8 items-center gap-2 rounded border border-zinc-300 px-2">
+            <Search size={14} className="shrink-0 text-steel" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setOpen(false);
+              }}
+              placeholder="Pesquisar nome, e-mail ou ID"
+              className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none"
+            />
+          </label>
+          <div role="listbox" className="mt-1 max-h-52 overflow-y-auto">
+            {visible.map((employee) => {
+              const employeeName = [employee.NAME, employee.LAST_NAME].filter(Boolean).join(' ') || `Usuário ${employee.ID}`;
+              return (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={employee.ID === value}
+                  key={employee.ID}
+                  onClick={() => {
+                    onSelect(employee.ID);
+                    setSearch('');
+                    setOpen(false);
+                  }}
+                  className="focus-ring flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-sky-50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-xs font-medium text-ink">{employeeName}</strong>
+                    <span className="block truncate text-[11px] text-zinc-400">{employee.EMAIL || `ID ${employee.ID}`}</span>
+                  </span>
+                  {employee.ID === value && <Check size={14} className="shrink-0 text-b24-blue-dark" />}
+                </button>
+              );
+            })}
+            {!visible.length && <p className="px-2 py-4 text-center text-xs text-steel">Nenhum colaborador encontrado.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NotificationPicker({ employees, selectedIds, search, onSearch, onToggle, onRemove }: {
   employees: BitrixEmployee[];
   selectedIds: string[];
@@ -378,10 +444,6 @@ function SuccessMessage({ message, signingUrl, portalUrl, local }: {
 
 function Field({ label, value, onChange, type = 'text', readOnly = false, required = false, hint, inputMode, placeholder, maxLength }: { label: string; value: string; onChange?: (value: string) => void; type?: string; readOnly?: boolean; required?: boolean; hint?: string; inputMode?: 'numeric'; placeholder?: string; maxLength?: number }) {
   return <label className="grid gap-1 text-sm text-steel"><span>{label} {required && <strong className="text-coral">*</strong>}</span><input required={required} type={type} inputMode={inputMode} placeholder={placeholder} readOnly={readOnly} maxLength={maxLength} className="focus-ring min-w-0 rounded border border-zinc-300 px-3 py-2 text-ink read-only:bg-zinc-100" value={value} onChange={(event) => onChange?.(event.target.value)} />{hint && <span className="text-xs text-coral">{hint}</span>}</label>;
-}
-
-function EditButton({ editing, disabled, label, onClick }: { editing: boolean; disabled: boolean; label: string; onClick: () => void }) {
-  return <button type="button" disabled={disabled} onClick={onClick} aria-label={editing ? `Concluir edição de ${label}` : `Editar ${label}`} title={editing ? 'Concluir edição' : `Editar ${label}`} className="focus-ring shrink-0 rounded border border-zinc-300 px-3 text-steel hover:bg-zinc-100 disabled:opacity-40">{editing ? <Check size={18} /> : <Pencil size={18} />}</button>;
 }
 
 function formatCpf(value: string) {

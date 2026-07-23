@@ -13,11 +13,16 @@ const validRequest = {
 };
 
 describe('CreateSendRequestDto', () => {
-  it('requires the department resolved from Bitrix24', async () => {
-    const dto = plainToInstance(CreateSendRequestDto, { ...validRequest, departamento: '' });
+  it('accepts a collaborator without email or department in the Bitrix24 profile', async () => {
+    const dto = plainToInstance(CreateSendRequestDto, {
+      employeeBitrixUserId: validRequest.employeeBitrixUserId,
+      employeeName: validRequest.employeeName,
+      cpf: validRequest.cpf,
+      equipment: validRequest.equipment
+    });
     const errors = await validate(dto);
 
-    expect(errors.some((error) => error.property === 'departamento')).toBe(true);
+    expect(errors).toHaveLength(0);
   });
 
   it('accepts the reduced form when all required fields are present', async () => {

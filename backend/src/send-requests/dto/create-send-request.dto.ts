@@ -11,11 +11,11 @@ export class EquipmentDto {
 
 export class CreateSendRequestDto {
   @Type(() => Number) @IsInt() @Min(1) employeeBitrixUserId!: number;
-  @IsEmail() employeeEmail!: string;
+  @IsOptional() @IsEmail() employeeEmail?: string;
   @IsString() @IsNotEmpty() employeeName!: string;
   @IsString() @IsNotEmpty() cpf!: string;
   @IsOptional() @IsString() cargo?: string;
-  @IsString() @IsNotEmpty() departamento!: string;
+  @IsOptional() @IsString() departamento?: string;
   @IsOptional() @IsString() city?: string;
   @IsOptional() @IsString() templateVersionId?: string;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => EquipmentDto)

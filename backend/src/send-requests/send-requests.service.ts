@@ -50,10 +50,10 @@ export class SendRequestsService {
   async createDraft(dto: CreateSendRequestDto, requestedByUserId?: string) {
     await this.bitrix.getUser(dto.employeeBitrixUserId);
     const bitrixId = String(dto.employeeBitrixUserId);
-    const email = dto.employeeEmail.trim().toLowerCase();
     const cpf = dto.cpf.trim();
-    const [byBitrixId, byEmail, byCpf] = await Promise.all([
-      this.prisma.employee.findUnique({ where: { bitrixId } }),
+    const byBitrixId = await this.prisma.employee.findUnique({ where: { bitrixId } });
+    const email = this.employeeEmail(dto, byBitrixId?.email);
+    const [byEmail, byCpf] = await Promise.all([
       this.prisma.employee.findUnique({ where: { email } }),
       this.prisma.employee.findUnique({ where: { cpf } })
     ]);
@@ -75,7 +75,7 @@ export class SendRequestsService {
       email,
       cpf,
       cargo: dto.cargo?.trim() || null,
-      departamento: dto.departamento.trim()
+      departamento: dto.departamento?.trim() || null
     };
     const employee = existing
       ? await this.prisma.employee.update({ where: { id: existing.id }, data: employeeData })
@@ -125,7 +125,7 @@ export class SendRequestsService {
     if (String(dto.employeeBitrixUserId) !== request.employee.bitrixId) {
       throw new BadRequestException('Nao e permitido trocar o colaborador de um rascunho; crie outro');
     }
-    const email = dto.employeeEmail.trim().toLowerCase();
+    const email = this.employeeEmail(dto, request.employee.email);
     const cpf = dto.cpf.trim();
     const notificationRecipients = await this.resolveNotificationRecipients(
       dto.notificationRecipientBitrixUserIds || []
@@ -145,7 +145,7 @@ export class SendRequestsService {
         where: { id: request.employeeId },
         data: {
           nome: dto.employeeName.trim(), email, cpf,
-          cargo: dto.cargo?.trim() || null, departamento: dto.departamento.trim()
+          cargo: dto.cargo?.trim() || null, departamento: dto.departamento?.trim() || null
         }
       }),
       this.prisma.sendRequestEquipment.deleteMany({ where: { sendRequestId: id } }),
@@ -570,11 +570,17 @@ export class SendRequestsService {
     return {
       bitrixUserId: dto.employeeBitrixUserId,
       name: dto.employeeName.trim(),
-      email: dto.employeeEmail.trim().toLowerCase(),
+      email: dto.employeeEmail?.trim().toLowerCase() || null,
       cpf: dto.cpf.trim(),
       cargo: dto.cargo?.trim() || null,
-      departamento: dto.departamento.trim()
+      departamento: dto.departamento?.trim() || null
     };
+  }
+
+  private employeeEmail(dto: CreateSendRequestDto, existingEmail?: string) {
+    return dto.employeeEmail?.trim().toLowerCase()
+      || existingEmail
+      || `bitrix-${dto.employeeBitrixUserId}@local.invalid`;
   }
 
   private toJson(value: unknown): Prisma.InputJsonValue {
