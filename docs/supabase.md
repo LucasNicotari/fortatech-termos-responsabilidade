@@ -24,7 +24,9 @@ O backend cria e confere o bucket idempotentemente. Não há política pública 
 
 ## Banco e RLS
 
-As 16 tabelas `app_*` possuem RLS habilitado. As roles `anon` e `authenticated` não têm permissões `INSERT`, `UPDATE`, `DELETE` ou `TRUNCATE`. A aplicação acessa as tabelas somente pela conexão PostgreSQL do backend.
+As 18 tabelas `app_*` possuem RLS habilitado. As roles `anon` e `authenticated` não têm
+permissões `INSERT`, `UPDATE`, `DELETE` ou `TRUNCATE`. A aplicação acessa as tabelas somente pela
+conexão PostgreSQL do backend; a chave secreta nunca vai para o navegador.
 
 A mudança de 2026 que deixou novas tabelas fora da Data API por padrão não altera esta arquitetura, pois o FortaDocs não consulta as tabelas pelo navegador nem pela Data API.
 
@@ -40,9 +42,14 @@ npm.cmd run prisma:seed
 No Render, o entrypoint executa `prisma migrate deploy` e o seed idempotente antes de iniciar a API. Após cada publicação:
 
 1. execute `prisma migrate status` com `DIRECT_URL`;
-2. confirme as 16 tabelas `app_*`;
+2. confirme as 13 migrations e as 18 tabelas `app_*`;
 3. confirme RLS e ausência de DML para `anon`/`authenticated`;
 4. execute Security Advisor e Performance Advisor no Dashboard;
 5. valide upload, download, URL assinada, SHA-256 e remoção de um arquivo sintético.
 
 Não execute `prisma migrate reset`, não exponha a chave secreta e não altere os schemas `auth`, `storage`, `realtime` ou `vault`.
+
+O CPF e os PDFs assinados são dados pessoais. O bucket privado e a remoção lógica da tela não
+definem, por si só, o prazo de guarda. Antes da produção, aprove e automatize uma política de
+retenção para rascunhos, PDFs, eventos, logs e backups, com teste de restauração e eliminação
+auditável.

@@ -15,7 +15,7 @@ binario oficial necessario para o Quick Tunnel.
 Quick Tunnels sao gratuitos, nao exigem dominio nem abertura de portas no roteador. Eles sao
 somente para teste: a URL aleatoria muda a cada execucao, nao ha garantia de disponibilidade,
 existe limite de requisicoes simultaneas e nao ha suporte a SSE. Nenhum desses limites afeta o
-fluxo HTTP e webhook usado neste teste.
+fluxo HTTP e os callbacks Bitrix24 usados neste teste.
 
 ## Preparacao unica
 
@@ -76,9 +76,11 @@ reconstroi os containers com `http://localhost:3000` e `http://localhost:5173`.
 
 Se for testar a instalacao pelo Bitrix24, copie as duas URLs exibidas para o cadastro do
 aplicativo apenas enquanto esse processo estiver aberto. Como as URLs mudam a cada inicio, nao
-as grave no `.env`, no Git nem no Render. O portal deve usar os escopos `user_basic`,
-`department` e `im`, e `BITRIX_CLIENT_ID`/`BITRIX_CLIENT_SECRET` precisam
-estar preenchidos localmente.
+as grave no `.env`, no Git nem no Render. O portal deve usar os escopos `basic`, `user`,
+`user_basic`, `department`, `im`, `placement` e `disk`, e
+`BITRIX_CLIENT_ID`/`BITRIX_CLIENT_SECRET` precisam estar preenchidos localmente. `crm` e
+`sign.b2e` são necessários somente se o teste tiver como objetivo explícito a compatibilidade
+legada, não o fluxo atual.
 
 ## O que fica publico
 
@@ -89,8 +91,8 @@ continuam exigindo JWT; callbacks Bitrix validam instalacao, dominio, `member_id
 tunel logo apos o teste.
 
 O modo local usa PostgreSQL e armazenamento locais por meio de `docker-compose.local.yml`; ele
-nao altera dados do Supabase de homologacao. O teste com Supabase e assinatura real pertence ao
-passo ponta a ponta posterior.
+nao altera dados do Supabase de homologacao. O teste ponta a ponta real usa assinatura interna
+FORTADOCS no slider do Bitrix24, mensagem de chat e arquivamento no Drive configurado.
 
 ## Solucao de problemas
 

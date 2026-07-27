@@ -55,13 +55,20 @@ erDiagram
 - A conclusao do convite e atomica e impede assinatura dupla.
 - Solicitacoes concluidas usam o estado `COMPLETED`, separado de `SENT`.
 - `removed_at` e `removed_by_user_id` retiram um termo da visao operacional sem destruir a evidencia.
-- Ao remover um termo pendente, o convite e revogado e a assinatura e cancelada.
+- A remoção em lote aceita até 100 IDs, usa transação serializável, registra um `batchId` comum e
+  ignora itens já removidos.
+- Ao remover um termo pendente, o convite só é revogado se a assinatura ainda não tiver vencido a
+  disputa de concorrência.
+- Um termo `SIGNED` com `archive_status=PENDING` ou `FAILED` não pode ser removido da visão até ser
+  confirmado no Drive.
 - O PDF final so fica `ARCHIVED` depois do upload privado e do SHA-256.
 - RLS esta habilitado em todas as tabelas `app_*`.
 - `anon` e `authenticated` nao possuem DML nas tabelas internas.
 
 ## Migrations
 
+- O repositório contém **13 migrations**; a mais recente é
+  `20260723230000_paginated_term_history`.
 - Migrations aplicadas nunca sao editadas.
 - `DIRECT_URL` e usada em `prisma migrate deploy`.
 - `DATABASE_URL` com pooler e usada no runtime.
@@ -70,3 +77,15 @@ erDiagram
 
 A migration `20260723170000_internal_bitrix_signing` e aditiva e preserva todos os registros
 historicos dos provedores Bitrix B2E e ZapSign.
+
+A migration `20260723230000_paginated_term_history` adiciona o índice composto
+`(removed_at, created_at, id)`. A API `GET /send-requests/page` usa esse índice para busca,
+filtros e paginação por cursor, com páginas entre 10 e 100 registros. O cursor evita o custo e a
+instabilidade de paginação por deslocamento conforme o histórico cresce.
+
+## Evolução futura
+
+Antes de executar mais de uma réplica da API, jobs de envio, expiração, sincronização,
+notificação e arquivamento deverão usar uma outbox/fila compartilhada e locks distribuídos. A
+política de retenção ainda precisa definir quando rascunhos, PDFs, eventos, logs e backups podem
+ser eliminados; remoção da tela não é eliminação física.

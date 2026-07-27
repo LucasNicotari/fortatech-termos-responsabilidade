@@ -62,6 +62,9 @@ export function PageShell() {
 
   const role = user?.role === 'ADMIN' ? 'Administrador' : user?.role;
   const currentUserPhoto = bitrixEmployees.find((employee) => String(employee.ID) === String(user?.bitrixUserId))?.PERSONAL_PHOTO;
+  const visiblePrimaryItems = user?.canOperate
+    ? primaryItems
+    : primaryItems.filter((item) => item.to !== '/send-requests');
 
   return (
     <div className="min-h-screen bg-b24-bg">
@@ -81,7 +84,7 @@ export function PageShell() {
             )}
 
             <nav className="hidden min-w-0 items-center gap-1 md:flex" aria-label="Navegação principal">
-              {primaryItems.map((item) => (
+              {visiblePrimaryItems.map((item) => (
                 <PrimaryLink key={item.to} {...item} />
               ))}
             </nav>
@@ -154,7 +157,7 @@ export function PageShell() {
           </div>
 
           <nav className="flex gap-1 overflow-x-auto border-t border-b24-border py-1.5 md:hidden" aria-label="Navegação principal">
-            {primaryItems.map((item) => (
+            {visiblePrimaryItems.map((item) => (
               <PrimaryLink key={item.to} {...item} />
             ))}
           </nav>

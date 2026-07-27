@@ -5,7 +5,13 @@ import { BitrixService } from './bitrix.service';
 import { TokenCryptoService } from './token-crypto.service';
 
 @Module({
-  imports: [HttpModule, LogsModule],
+  imports: [
+    HttpModule.register({
+      timeout: 15_000,
+      maxRedirects: 3
+    }),
+    LogsModule
+  ],
   providers: [BitrixService, TokenCryptoService],
   exports: [BitrixService, TokenCryptoService]
 })

@@ -1,19 +1,20 @@
 # Arquitetura do FortaDocs
 
-## Visao geral
+## Visão geral
 
-O FortaDocs e um aplicativo de servidor incorporado ao Bitrix24. O portal fornece identidade,
-usuarios, departamentos, fotos e chat. O FortaDocs gera os documentos e executa a assinatura em
-uma tela propria aberta dentro do Bitrix24. PostgreSQL e Storage privados ficam no Supabase.
+O FortaDocs é um aplicativo de servidor incorporado ao Bitrix24. O portal fornece identidade,
+diretório de usuários, departamentos, fotos, chat e Drive. O FortaDocs gera o documento e oferece
+uma tela própria de assinatura aberta dentro do Bitrix24. PostgreSQL e Storage privados ficam no
+Supabase; o backend e o frontend público HTTPS são publicados no Render.
 
 ```mermaid
 flowchart LR
   subgraph B24[Bitrix24]
-    ADMIN[Operadores e administradores]
-    USERS[Usuarios, fotos e departamentos]
-    CHAT[Chat pessoal]
+    PANEL[Painel incorporado]
+    DIRECTORY[Usuários, fotos e departamentos]
+    CHAT[Chat e notificações]
     SLIDER[Slider REST_APP_URI]
-    DRIVE[Drive pessoal 8465]
+    DRIVE[Drive pessoal do owner configurado]
   end
 
   subgraph RENDER[Render HTTPS]
@@ -22,116 +23,175 @@ flowchart LR
     DOC[Docxtemplater + LibreOffice + pdf-lib]
   end
 
-  subgraph SUPA[Supabase HML]
-    DB[(PostgreSQL)]
+  subgraph SUPA[Supabase]
+    DB[(PostgreSQL com RLS)]
     STORAGE[(Bucket privado)]
   end
 
-  SIGNER[Colaborador signatario]
-  NOTIFIED[Pessoas notificadas]
+  OP[Operador autorizado]
+  SIGNER[Colaborador signatário]
+  WATCHERS[Pessoas notificadas]
 
-  ADMIN --> WEB
+  OP --> PANEL --> WEB
   WEB --> API
-  API <--> USERS
-  API --> CHAT
+  API <--> DIRECTORY
+  API --> CHAT --> SIGNER
+  SIGNER --> SLIDER --> WEB
+  API --> WATCHERS
   API --> DRIVE
-  CHAT --> SIGNER
-  SIGNER --> SLIDER
-  SLIDER --> WEB
   API <--> DB
-  DOC --> API
   API <--> STORAGE
-  API --> NOTIFIED
+  API --> DOC --> API
 ```
 
-## Componentes
+## Responsabilidades
 
 | Componente | Responsabilidade |
 |---|---|
-| Frontend React | Painel administrativo e experiencia exclusiva do signatario |
-| API NestJS | Autorizacao, regras, PDF, convites, chat, notificacoes e auditoria |
-| Prisma/PostgreSQL | Dados operacionais, snapshots, convites e trilha de eventos |
-| Supabase Storage | DOCX de origem, PDFs sem assinatura e PDFs finais |
-| Bitrix24 OAuth | Confirma o usuario atual no painel e no link de assinatura |
-| `im.message.add` | Envia o convite ao chat pessoal do colaborador |
-| `REST_APP_URI` | Abre o FortaDocs dentro do portal com contexto do convite |
-| Drive Bitrix24 | Guarda o PDF final em `Termo de Responsabilidade` e confirma a conclusao |
+| Frontend React | Painel administrativo responsivo e experiência isolada do signatário |
+| API NestJS | Autorização, regras, PDF, convites, chat, notificações, Drive e auditoria |
+| Prisma/PostgreSQL | Dados operacionais, snapshots mínimos, convites e trilha de eventos |
+| Supabase Storage | DOCX de origem, PDFs sem assinatura e PDFs finais em bucket privado |
+| Bitrix24 OAuth | Confirma o usuário atual no painel e na abertura do convite |
+| `im.message.add` | Envia o convite pessoal ao chat do colaborador |
+| `REST_APP_URI` | Abre o FortaDocs dentro do portal com o contexto do convite |
+| Drive Bitrix24 | Guarda o PDF final na pasta configurada e confirma a conclusão |
 
-## Identidades e sessoes
+Na homologação atual, `BITRIX_DRIVE_OWNER_USER_ID=8465` e
+`BITRIX_DRIVE_FOLDER_NAME=Termo de Responsabilidade`. O código usa as variáveis, e não o ID
+fixo, para permitir a futura migração a uma conta técnica ou Drive empresarial.
+
+## Fluxo ponta a ponta
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Operador
+  participant Web as FortaDocs
+  participant API as API NestJS
+  participant B24 as Bitrix24
+  participant DB as PostgreSQL
+  participant Storage as Storage privado
+  actor Colaborador
+  participant Drive as Drive pessoal
+
+  Operador->>Web: Seleciona colaborador pelo ID
+  Web->>API: Dados do termo, CPF e equipamentos
+  API->>B24: Consulta perfil e departamento pelo ID
+  B24-->>API: Nome, e-mail, cargo, setor e foto
+  API->>API: Valida CPF e gera DOCX/PDF
+  API->>Storage: Salva PDF sem assinatura + SHA-256
+  Storage-->>Web: Prévia por URL temporária
+  Operador->>Web: Confirma envio e notificados
+  Web->>API: Enviar termo
+  API->>DB: Cria assinatura FORTADOCS e convite com token em hash
+  API->>B24: Envia link pessoal pelo chat
+  API->>DB: Estado ENVIADO
+  B24-->>Colaborador: Convite válido por sete dias
+  Colaborador->>B24: Abre o link dentro do portal
+  B24->>API: OAuth, PLACEMENT_OPTIONS e user.current
+  API->>DB: Confere token, prazo e ID; estado VISUALIZADO
+  API-->>Colaborador: Tela restrita para digitar, desenhar ou importar
+  Colaborador->>API: PNG normalizado + concordância
+  API->>Storage: Lê original e salva PDF assinado + SHA-256
+  API->>DB: Estado ASSINADO e convite encerrado
+  API->>B24: Notifica os destinatários escolhidos
+  API->>Drive: Salva na pasta configurada
+  alt Drive confirma arquivo
+    Drive-->>API: IDs do arquivo, pasta e detalhe
+    API->>DB: Estado CONCLUÍDO / ARCHIVED
+  else Drive falha
+    API->>DB: Mantém ASSINADO / archive_status=FAILED
+    API-->>Web: Disponibiliza tentativa de arquivamento
+  end
+```
+
+## Identidades e sessões
 
 Existem dois contextos isolados:
 
-1. **Administrativo**: o usuario precisa estar ativo em `app_users`. O JWT concede acesso ao
-   painel conforme perfil e configuracao de operador.
-2. **Signatario**: o usuario nao precisa receber acesso ao painel. O JWT possui
-   `scope=SIGN_DOCUMENT`, referencia um unico convite e e aceito somente em `/signing/*`.
+1. **Administrativo**: o usuário precisa estar ativo em `app_users`. A resposta de sessão informa
+   perfil e `user.canOperate`; somente operadores criam, enviam, sincronizam ou removem termos.
+2. **Signatário**: o usuário não recebe acesso administrativo. O JWT possui
+   `scope=SIGN_DOCUMENT`, referencia um único convite e só é aceito em `/signing/*`.
 
-O token do convite nao autentica sozinho. O backend tambem consulta `user.current` e exige que o
-ID Bitrix24 seja igual ao colaborador do documento.
+O token do convite não autentica sozinho. O backend consulta `user.current` e exige que o ID
+Bitrix24 seja o mesmo colaborador associado ao documento.
 
 ```mermaid
 flowchart TD
   OPEN[Bitrix24 abre o manipulador] --> KIND{Existe signing em PLACEMENT_OPTIONS?}
-  KIND -- Nao --> ADMINCHECK{Usuario ativo no FortaDocs?}
+  KIND -- Não --> ADMINCHECK{Usuário ativo no FortaDocs?}
   ADMINCHECK -- Sim --> ADMINJWT[JWT administrativo]
-  ADMINCHECK -- Nao --> DENY[Acesso negado]
-  KIND -- Sim --> TOKEN[Calcula SHA-256 do token]
-  TOKEN --> INVITE{Convite valido?}
-  INVITE -- Nao --> DENY
+  ADMINCHECK -- Não --> DENY[Acesso negado]
+  KIND -- Sim --> HASH[Calcula SHA-256 do token]
+  HASH --> INVITE{Convite ativo e dentro do prazo?}
+  INVITE -- Não --> DENY
   INVITE -- Sim --> ID{user.current = colaborador?}
-  ID -- Nao --> DENY
+  ID -- Não --> DENY
   ID -- Sim --> SIGNJWT[JWT SIGN_DOCUMENT]
 ```
 
-## Dados principais
+## Dados e crescimento
 
-| Tabela | Uso |
-|---|---|
-| `app_users` | Usuarios administrativos autorizados |
-| `app_employees` | Snapshot minimo do colaborador |
-| `app_send_requests` | Solicitacao, arquivo e status do termo |
-| `app_send_request_equipment` | Equipamentos imutaveis do documento |
-| `app_send_request_notification_recipients` | Notificados escolhidos para aquele termo |
-| `app_signatures` | Estado agregado e hashes do PDF final |
-| `app_signing_invitations` | Convite, validade, metodo e evidencia da assinatura |
-| `app_signature_events` | Eventos idempotentes de envio, abertura e conclusao |
-| `app_bitrix_installations` | OAuth do aplicativo, criptografado |
-| `app_bitrix_launch_codes` | Codigos de abertura de uso unico |
+O schema possui 18 tabelas `app_*`. A solicitação é o agregado central; equipamentos,
+destinatários de notificação, tentativas, assinatura e eventos preservam a evidência de cada
+termo. Consulte [database.md](database.md) para a relação completa.
 
-## Geracao e assinatura do documento
+A API de histórico oferece paginação por cursor, limite entre 10 e 100 e filtros no servidor. O
+índice `(removed_at, created_at, id)` sustenta a ordenação conforme o volume cresce. O diretório
+Bitrix24 usa cache curto de 60 segundos e requisições HTTP têm timeout de 15 segundos. A
+sincronização processa no máximo 100 assinaturas por execução, com concorrência cinco.
 
-1. O DOCX versionado recebe nome, CPF, data e equipamentos.
-2. O LibreOffice converte o documento para PDF.
-3. A API calcula SHA-256, envia o PDF ao bucket privado e retorna uma URL temporaria.
-4. No envio, a API cria assinatura `FORTADOCS`, convite e destinatarios de notificacao.
-5. O colaborador abre o link no chat e escolhe assinatura digitada, desenhada ou imagem.
-6. O frontend normaliza a assinatura para PNG.
-7. O backend valida o PNG, incorpora-o na ultima pagina e calcula novos hashes.
-8. O convite e encerrado e o documento passa para `SIGNED`; o PDF privado permanece no Supabase.
-9. A API localiza o Drive do usuario `8465`, envia o arquivo para `Termo de Responsabilidade` e
-   guarda os IDs retornados.
-10. Somente depois dessa confirmacao o documento passa para `FINISHED` e a solicitacao para
-    `COMPLETED`.
+Conversões PDF passam por uma fila local controlada por:
 
-O diagrama detalhado de sequencia, estados e controles esta em
-[internal-signing-flow.md](internal-signing-flow.md).
+- `PDF_CONVERSION_CONCURRENCY` — padrão `1`, máximo aceito `4`;
+- `PDF_CONVERSION_QUEUE_LIMIT` — padrão `20`;
+- `PDF_CONVERSION_QUEUE_TIMEOUT_MS` — padrão `30000`.
 
-## Seguranca
+Esses limites evitam várias instâncias pesadas do LibreOffice no mesmo processo. Eles não
+substituem uma fila distribuída quando houver mais de uma réplica.
+
+## Remoção operacional
+
+A tela **Termos** usa caixas de seleção, seleção de todos os itens removíveis carregados e uma
+confirmação única. A API aceita até 100 IDs por operação e executa remoção lógica, atômica e
+auditada:
+
+- rascunhos deixam a lista sem destruir registros;
+- convites pendentes são revogados e a assinatura é cancelada;
+- PDFs, hashes e eventos assinados permanecem preservados;
+- itens já removidos são ignorados de forma idempotente;
+- um termo `SIGNED` com Drive `PENDING` ou `FAILED` é bloqueado até o arquivamento.
+
+## Segurança
 
 - segredos somente no backend e no painel do Render;
 - tokens OAuth criptografados em repouso;
+- perfil do colaborador derivado novamente no backend pelo ID Bitrix24;
+- CPF validado, normalizado e nunca escrito em logs técnicos;
 - tabelas `app_*` com RLS e sem DML para `anon`/`authenticated`;
-- bucket privado e URLs assinadas de curta duracao;
-- token de convite armazenado apenas como hash;
-- codigo de abertura de dois minutos e uso unico;
-- sessao do signatario limitada a uma hora;
-- checagem de identidade pelo Bitrix24 em cada abertura;
-- assinatura limitada a PNG de 1 MB no backend;
-- conclusao atomica, SHA-256 e trilha de eventos;
-- dados pessoais ausentes de logs de integracao.
+- bucket privado, tipos/tamanho controlados e URLs assinadas de curta duração;
+- token do convite armazenado apenas como hash;
+- código de abertura de dois minutos e uso único;
+- sessão do signatário limitada a uma hora;
+- imagem de assinatura PNG limitada por bytes, dimensões e quantidade de pixels;
+- conclusão atômica, SHA-256 e trilha de eventos;
+- payloads de integração registrados apenas com metadados técnicos, sem documento ou mensagem.
 
-## Legado
+## Escopos Bitrix24
 
-Registros antigos dos provedores `BITRIX` e `ZAPSIGN` permanecem consultaveis e nao sao apagados.
-Novos termos usam `FORTADOCS`. As rotinas antigas ficam isoladas para compatibilidade ate que o
-periodo de retencao dos registros historicos termine.
+O aplicativo atual usa `basic`, `user`, `user_basic`, `department`, `im`, `placement` e `disk`.
+Os escopos `crm` e `sign.b2e` pertencem ao Bitrix Sign B2E legado e não são necessários para
+novos termos.
+
+## Legado e próximos passos
+
+Registros antigos dos provedores `BITRIX` (Sign B2E) e `ZAPSIGN` permanecem consultáveis. Novos
+termos usam `FORTADOCS`; não há assinatura de representante no documento atual.
+
+Antes de escalar horizontalmente, é necessário externalizar o processamento para outbox/fila,
+adotar jobs idempotentes de expiração, notificações e arquivamento, distribuir locks e retirar
+migrations do startup da API. Também permanecem pendentes a política formal de retenção,
+restauração testada, métricas/alertas e a eliminação do ponto único representado pelo Drive
+pessoal configurado.

@@ -1,6 +1,6 @@
 # Relatorio de otimizacao Docker
 
-Data da validacao: 22/07/2026.
+Data da revisão: 27/07/2026.
 
 ## Resumo executivo
 
@@ -11,33 +11,43 @@ atual precisa conseguir aplicar migrations sem depender de uma infraestrutura de
 nao configurada.
 
 A imagem original observada no Docker Desktop tinha 1,55 GB. A variante agressiva chegou a
-973 MB, mas removia manualmente conteudo interno do LibreOffice e usava Node Bookworm sobre
-Debian Trixie. Esses dois pontos foram rejeitados na revisao de seguranca. A imagem final segura
-tem aproximadamente 1,01 GB no `docker image ls`, preserva integralmente o LibreOffice e inclui
-as fontes metricamente compativeis com o modelo.
+973 MB, mas removia manualmente conteúdo interno do LibreOffice e misturava famílias Debian.
+Esses pontos foram rejeitados. Depois de retirar artefatos WASM não usados, compartilhar por
+link simbólico o engine Prisma já presente e remover símbolos do executável Node em uma etapa de
+build isolada, a imagem segura ficou em 958 MB no `docker image ls`, preservando o LibreOffice e
+as fontes necessárias ao documento oficial.
+
+Tamanho da imagem, cache de build e memória em execução são medidas diferentes. Na auditoria
+final, os três containers consumiram aproximadamente 117 MiB ociosos no total; a API ficou em
+aproximadamente 65 MiB. Portanto, 958 MB de imagem não significam 958 MB de RAM.
 
 ## Baseline e resultado
 
 | Medida | Baseline | Resultado seguro |
 |---|---:|---:|
-| Backend no Docker Desktop | 1,55 GB | 1,01 GB |
-| Frontend | 74,8 MB | 74,2 MB |
-| `node_modules` do backend | 384 MB | 157 MB |
+| Backend no Docker Desktop | 1,55 GB | 958 MB; conteúdo transferível 252 MB |
+| Frontend | 74,8 MB | 74,3 MB |
+| PostgreSQL 16 Alpine | — | aproximadamente 420 MB em disco |
+| RAM ociosa da API | não medida | aproximadamente 65 MiB |
+| RAM ociosa dos três containers | não medida | aproximadamente 117 MiB |
+| `node_modules` do backend | 384 MB | aproximadamente 135 MB |
 | `/usr/lib/libreoffice` | 197 a 208 MB | 197 MB |
 | Camada do sistema, LibreOffice e fontes | 358 MB na base anterior | 370 MB |
 | Codigo compilado `dist` | cerca de 2 MB | cerca de 2 MB |
 | Contexto no build limpo | variava conforme o cache | backend 8,1 KB; frontend 249 KB |
-| Cache apos limpeza | ate 20,25 GB durante as iteracoes | 346 MB ativos e 0 B recuperaveis |
+| Cache de build na auditoria | — | 5,705 GB; 1,746 GB recuperáveis naquele momento |
 
 O valor de 370 MB e uma camada completa e inclui bibliotecas do sistema, certificados,
 OpenSSL, `tini`, LibreOffice e fontes. Ele nao deve ser comparado diretamente apenas com o
-diretorio `/usr/lib/libreoffice`.
+diretorio `/usr/lib/libreoffice`. Os valores de cache são voláteis e não fazem parte da imagem
+publicada nem da RAM do container.
 
 ## Principais causas do tamanho
 
 1. LibreOffice Writer e bibliotecas necessarias para importar DOCX e exportar PDF.
 2. Executavel oficial do Node.js 22, com aproximadamente 125 MB descompactado.
-3. Dependencias de producao, Prisma Client e ferramentas de migration, com 174 MB.
+3. Dependências de produção, Prisma Client e ferramentas de migration, com aproximadamente
+   164 MB na medição atual.
 4. Debian Slim, bibliotecas criptograficas, fontes e certificados.
 
 O frontend ja usa build multi-stage e entrega somente arquivos estaticos pelo Nginx. Alterar
@@ -63,7 +73,10 @@ essa imagem, que tem 74,8 MB, traria pouco ganho e risco desnecessario.
 | Usar `tini` e preservar sinais | Segura e importante | Aplicada |
 | Perfil LibreOffice exclusivo por conversao | Necessaria para concorrencia | Aplicada e testada |
 | Apagar arquivos `LICENSE` de pacotes | Risco de conformidade | Revertida; licencas permanecem |
-| Apagar `.d.ts`, source maps e documentacao de pacotes no runtime | Baixo risco | Aplicada; testes de runtime aprovados |
+| Apagar `.d.ts`, source maps e documentação de pacotes no runtime | Baixo risco | Aplicada; testes de runtime aprovados |
+| Apagar o engine Prisma usado no startup | Contraproducente | Revertida; `migrate deploy` o baixava novamente |
+| Rotação de logs e limite de PIDs | Segura | Aplicada no Compose |
+| Limite rígido de memória sem teste de carga | Arriscada | Adiada até medir pico de DOCX/PDF |
 | Alpine no backend | Alto custo para LibreOffice | Rejeitada; a tentativa anterior ficou maior |
 | Meta de 550 a 700 MB | Irrealista na arquitetura atual | Nao perseguida em detrimento da qualidade |
 
@@ -100,9 +113,11 @@ para `migrate deploy`, pois:
 - remover a CLI antes disso poderia publicar codigo antes do schema correspondente;
 - um servico Docker de migration criaria outra imagem e nao resolveria sozinho o Render.
 
-Foram removidos do runtime motores de consulta duplicados, runtimes WASM para outros bancos,
-o gerador de Prisma Client, TypeScript, fontes TypeScript do pacote Effect, mapas e declaracoes
-de tipos. `prisma migrate deploy` e `prisma migrate status` continuaram funcionando.
+Runtimes WASM de outros bancos, o gerador de Prisma Client, TypeScript, fontes TypeScript do
+pacote Effect, mapas e declarações de tipos não entram no runtime. O engine necessário ao Prisma
+foi preservado na imagem: quando ele era apagado, `prisma migrate deploy` recriava cerca de 17 MB
+em `node_modules` e outra cópia no cache do usuário, aumentando a camada gravável do container.
+Preservá-lo torna o startup determinístico e evita rede/download oculto.
 
 Quando houver CI/CD privado confiavel, `prisma` pode migrar para `devDependencies` e a migration
 pode ser executada antes do deploy. Esse e o proximo ganho seguro, mas nao deve ser feito antes
@@ -113,6 +128,8 @@ da infraestrutura existir.
 - Processo principal executa como `node`, UID/GID 1000.
 - PID 1 e `tini`; o processo Node recebe sinais corretamente.
 - A imagem possui healthcheck HTTP sem instalar `curl`.
+- Portas locais são publicadas apenas em `127.0.0.1`.
+- Logs `json-file` giram em arquivos limitados e cada serviço possui `pids_limit`.
 - `.env`, Git, caches, dependencias locais, builds, cobertura, backups e artefatos nao entram no
   contexto Docker.
 - Licencas das dependencias permanecem na imagem.
@@ -122,18 +139,41 @@ da infraestrutura existir.
 
 ## Conversoes concorrentes
 
-Cada conversao cria seu proprio diretorio temporario e agora passa ao LibreOffice um
-`UserInstallation` exclusivo. Isso impede que duas requisicoes disputem o mesmo arquivo de
-perfil e evita travamentos intermitentes. O diretorio inteiro e removido no bloco `finally`.
+Cada conversão cria diretório temporário e `UserInstallation` exclusivo. Além disso, uma fila
+impede que prévias simultâneas criem processos LibreOffice sem limite:
+
+- `PDF_CONVERSION_CONCURRENCY=1`;
+- `PDF_CONVERSION_QUEUE_LIMIT=20`;
+- `PDF_CONVERSION_QUEUE_TIMEOUT_MS=30000`.
+
+Os valores podem ser ajustados dentro dos limites validados, mas devem ser alterados somente após
+teste de carga e observação do pico de memória.
+
+## Limpeza segura do cache
+
+```powershell
+npm.cmd run local:clean-cache
+```
+
+O modo padrão remove cache de build com mais de 24 horas e imagens intermediárias soltas. Ele
+preserva imagens ainda referenciadas, containers, volumes, banco e PDFs.
+
+```powershell
+npm.cmd run local:clean-cache:all
+```
+
+O modo `:all` executa limpeza global de todo cache e de imagens sem uso. Ele pode afetar o cache
+de outros projetos da máquina e, por isso, deve ser usado conscientemente. Nenhum dos comandos
+remove volumes.
 
 ## Validacoes executadas
 
-- 12 suites e 45 testes unitarios aprovados.
+- Baseline desta revisão: 14 suítes e 77 testes unitários aprovados.
 - Lint e compilacao Nest aprovados.
-- Seis migrations reconhecidas, incluindo a limpeza de estruturas redundantes.
-- Banco local atualizado com 16 tabelas `app_*` e RLS habilitado.
+- Treze migrations reconhecidas.
+- Banco com 18 tabelas `app_*` e RLS habilitado.
 - Backend inicializado sem instalacao ou compilacao no startup.
-- Duas conversoes DOCX para PDF disparadas em paralelo.
+- Duas conversões DOCX para PDF solicitadas em paralelo e serializadas pelo limite padrão.
 - Fluxo local completo: rascunho, PDF, envio, assinatura, arquivo e SHA-256.
 - PDF final valido, com quatro paginas A4 e sem rotacao.
 - Reinicio do backend preservou 22 arquivos no volume local.
@@ -150,6 +190,8 @@ perfil e evita travamentos intermitentes. O diretorio inteiro e removido no bloc
    outro processador e exige revisao de seguranca/LGPD. Nao recomendado neste momento.
 4. Retirar LibreOffice: seria o maior ganho, mas compromete o requisito de fidelidade do DOCX.
    Rejeitado.
+5. Adotar outbox/fila distribuída antes da escala horizontal: necessária para coordenar
+   conversão, envio, expiração, sincronização e Drive entre réplicas.
 
 Conclusao: a configuracao final prioriza fidelidade, seguranca e capacidade de deploy. Forcar a
 meta de 550 a 700 MB agora exigiria uma mudanca arquitetural, nao apenas limpeza de Dockerfile.

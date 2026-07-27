@@ -5,17 +5,24 @@ Aplicativo interno da Forta Tech, incorporado ao Bitrix24, para preparar, revisa
 ## Fluxo oficial
 
 1. Um operador autorizado abre o FortaDocs pelo Bitrix24.
-2. Seleciona um colaborador ativo; nome, e-mail, cargo, departamento e foto vêm do perfil do Bitrix24.
-3. Confere os dados, informa o CPF e registra os equipamentos entregues.
-4. O backend preenche o DOCX, converte-o para PDF e disponibiliza uma prévia privada por cinco minutos.
-5. Depois da revisão, o backend envia ao chat do colaborador um convite pessoal válido por sete dias.
+2. Seleciona um colaborador ativo; nome, e-mail, cargo, departamento e foto vêm do perfil do
+   Bitrix24, consultado novamente no backend pelo ID.
+3. Confere os dados, informa um CPF válido e registra os equipamentos entregues.
+4. O backend preenche o DOCX, converte-o para PDF e disponibiliza uma prévia privada por cinco
+   minutos.
+5. Depois da revisão, o backend envia ao chat do colaborador um convite pessoal válido por sete
+   dias e o termo fica **Enviado**.
 6. Ao abrir o convite, o Bitrix24 confirma a identidade e o termo passa para **Visualizado**.
-7. O colaborador digita, desenha ou importa a assinatura dentro do Bitrix24; o PDF passa para **Assinado**.
+7. Somente o colaborador digita, desenha ou importa a assinatura dentro do Bitrix24; o PDF passa
+   para **Assinado**.
 8. Os usuários escolhidos são notificados sem participar da assinatura.
-9. O PDF assinado é preservado no bucket privado do Supabase e enviado ao Drive do Bitrix24.
-10. Somente após a confirmação na pasta `Termo de Responsabilidade` o termo passa para **Concluído**.
+9. O PDF assinado é preservado no bucket privado do Supabase e enviado ao Drive pessoal indicado
+   por `BITRIX_DRIVE_OWNER_USER_ID`, na pasta configurada.
+10. Somente após o Drive confirmar o arquivo o termo passa para **Concluído**.
 
-Lucas e Osmar podem operar o fluxo inicial. Nicoly e Marcelo recebem notificações. Essas atribuições são editáveis em **Configurações > Usuários e acessos**.
+Operadores e destinatários de notificações são editáveis em **Configurações > Usuários e
+acessos**. Essas atribuições não criam campos de assinatura: no fluxo atual, apenas o colaborador
+assina.
 
 ## Componentes
 
@@ -26,6 +33,18 @@ Lucas e Osmar podem operar o fluxo inicial. Nicoly e Marcelo recebem notificaç�
 - Chat, OAuth, `REST_APP_URI` e Drive do Bitrix24 para convite, identidade, assinatura e arquivo final.
 - Supabase Storage privado para templates, prévias e documentos concluídos.
 - Docker Compose para desenvolvimento e Render para HTTPS público.
+
+Bitrix Sign B2E e ZapSign permanecem apenas como compatibilidade histórica/alternativa
+desativada. Novos termos usam o provedor interno `FORTADOCS`.
+
+## Estado técnico
+
+- 13 migrations e 18 tabelas `app_*`, todas protegidas por RLS.
+- Histórico de Termos paginado por cursor, com busca/filtros no servidor.
+- Remoção lógica em lote por caixas de seleção; PDFs, hashes e auditoria são preservados.
+- Cache curto do diretório Bitrix24, timeout HTTP e concorrência limitada para sincronização e
+  conversão PDF.
+- Baseline desta revisão: 14 suítes e 77 testes automatizados.
 
 ## Desenvolvimento local
 
@@ -57,10 +76,13 @@ Copie `.env.example` para `.env`. Nunca envie o `.env` ao Git ou ao chat.
 - Segurança: `JWT_SECRET`, `BITRIX_TOKEN_ENCRYPTION_KEY`.
 - Bitrix24: `BITRIX_CLIENT_ID`, `BITRIX_CLIENT_SECRET`, `BITRIX_PORTAL_ORIGIN`, `BITRIX_DRIVE_OWNER_USER_ID`, `BITRIX_DRIVE_FOLDER_NAME`.
 - URLs: `PUBLIC_BACKEND_URL`, `FRONTEND_URL`, `CORS_ORIGINS`, `VITE_API_URL`.
+- Conversão: `PDF_CONVERSION_CONCURRENCY`, `PDF_CONVERSION_QUEUE_LIMIT`,
+  `PDF_CONVERSION_QUEUE_TIMEOUT_MS`.
 
 Nenhum segredo pode usar prefixo `VITE_`. As listas de operadores e notificados do ambiente são apenas valores iniciais; depois da instalação, as escolhas persistem no banco.
-O aplicativo local precisa dos escopos `basic`, `user`, `crm`, `im` e `disk`; qualquer alteração
-de escopo exige salvar e reinstalar o aplicativo no portal.
+O aplicativo local precisa dos escopos `basic`, `user`, `user_basic`, `department`, `im`,
+`placement` e `disk`; qualquer alteração exige salvar e reinstalar o aplicativo no portal.
+`crm` e `sign.b2e` pertencem somente ao fluxo legado de Bitrix Sign B2E.
 
 ## Verificação técnica
 

@@ -302,6 +302,14 @@ export class SignaturesService {
       || imageBytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
       throw new BadRequestException('Imagem da assinatura invalida ou maior que 1 MB');
     }
+    if (imageBytes.length < 24) {
+      throw new BadRequestException('Imagem da assinatura PNG incompleta');
+    }
+    const width = imageBytes.readUInt32BE(16);
+    const height = imageBytes.readUInt32BE(20);
+    if (!width || !height || width > 4_096 || height > 2_048 || width * height > 4_000_000) {
+      throw new BadRequestException('Dimensoes da assinatura excedem o limite permitido');
+    }
     return imageBytes;
   }
 
@@ -339,9 +347,11 @@ export class SignaturesService {
   async sync(dto: SyncSignaturesDto) {
     if (dto.signatureId) return this.syncOne(dto.signatureId);
     const signatures = await this.prisma.signature.findMany({
-      where: { status: { in: [SignatureStatus.PENDING, SignatureStatus.SENT, SignatureStatus.VIEWED, SignatureStatus.IN_PROGRESS, SignatureStatus.SIGNED, SignatureStatus.ERROR] } }
+      where: { status: { in: [SignatureStatus.PENDING, SignatureStatus.SENT, SignatureStatus.VIEWED, SignatureStatus.IN_PROGRESS, SignatureStatus.SIGNED, SignatureStatus.ERROR] } },
+      orderBy: { updatedAt: 'asc' },
+      take: 100
     });
-    return Promise.all(signatures.map((signature) => this.syncOne(signature.id)));
+    return mapWithConcurrency(signatures, 5, (signature) => this.syncOne(signature.id));
   }
 
   async syncByDocumentUid(documentUid: string, eventStatus?: string, payload?: unknown) {
@@ -809,6 +819,29 @@ export function handwrittenSignaturePlacement(
     width,
     height
   };
+}
+
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const run = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(Math.max(1, concurrency), items.length) },
+      () => run()
+    )
+  );
+  return results;
 }
 
 export function findCenteredSignatureLineY(

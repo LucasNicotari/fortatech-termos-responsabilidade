@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   ArchiveStatus,
@@ -9,7 +14,7 @@ import {
   SignatureProvider,
   SignatureStatus
 } from '@prisma/client';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { BitrixService } from '../bitrix/bitrix.service';
 import { DocumentsService } from '../documents/documents.service';
 import { LogsService } from '../logs/logs.service';
@@ -18,6 +23,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ZapSignService } from '../signature-providers/zapsign.service';
 import { CreateSendRequestDto, UpdateSendRequestDto } from './dto/create-send-request.dto';
+import {
+  ListSendRequestsDto,
+  TermHistoryFilter
+} from './dto/list-send-requests.dto';
 
 @Injectable()
 export class SendRequestsService {
@@ -37,7 +46,9 @@ export class SendRequestsService {
       where: { removedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
-        employee: true,
+        employee: {
+          select: { id: true, bitrixId: true, nome: true, email: true }
+        },
         equipment: { orderBy: { itemNumber: 'asc' } },
         templateVersion: { include: { template: true } },
         attempts: { orderBy: { attemptNumber: 'desc' }, take: 1 },
@@ -47,12 +58,123 @@ export class SendRequestsService {
     });
   }
 
+  async findPage(query: ListSendRequestsDto) {
+    const where = this.historyWhere(query.filter, query.search);
+    const items = await this.prisma.sendRequest.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: query.limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      include: {
+        employee: {
+          select: { id: true, bitrixId: true, nome: true, email: true }
+        },
+        equipment: { orderBy: { itemNumber: 'asc' } },
+        templateVersion: { include: { template: true } },
+        attempts: { orderBy: { attemptNumber: 'desc' }, take: 1 },
+        signatures: { orderBy: { createdAt: 'desc' }, take: 1 },
+        notificationRecipients: { orderBy: { name: 'asc' } }
+      }
+    });
+    const hasMore = items.length > query.limit;
+    if (hasMore) items.pop();
+    return {
+      items,
+      nextCursor: hasMore ? items.at(-1)?.id || null : null
+    };
+  }
+
+  private historyWhere(filter: TermHistoryFilter, search?: string): Prisma.SendRequestWhereInput {
+    const conditions: Prisma.SendRequestWhereInput[] = [{ removedAt: null }];
+    const normalizedSearch = search?.trim();
+    if (normalizedSearch) {
+      conditions.push({
+        OR: [
+          { employee: { nome: { contains: normalizedSearch, mode: 'insensitive' } } },
+          { employee: { email: { contains: normalizedSearch, mode: 'insensitive' } } },
+          { employee: { bitrixId: { contains: normalizedSearch, mode: 'insensitive' } } },
+          { documentFileName: { contains: normalizedSearch, mode: 'insensitive' } }
+        ]
+      });
+    }
+    const filterWhere = this.historyFilterWhere(filter);
+    if (filterWhere) conditions.push(filterWhere);
+    return { AND: conditions };
+  }
+
+  private historyFilterWhere(filter: TermHistoryFilter): Prisma.SendRequestWhereInput | undefined {
+    if (filter === 'DRAFT') {
+      return { status: { in: [SendRequestStatus.DRAFT, SendRequestStatus.READY] } };
+    }
+    if (filter === 'WAITING') {
+      return {
+        OR: [
+          {
+            status: {
+              in: [
+                SendRequestStatus.PENDING,
+                SendRequestStatus.SENDING,
+                SendRequestStatus.SENT,
+                SendRequestStatus.VIEWED,
+                SendRequestStatus.IN_PROGRESS
+              ]
+            }
+          },
+          {
+            signatures: {
+              some: {
+                status: {
+                  in: [
+                    SignatureStatus.PENDING,
+                    SignatureStatus.SENT,
+                    SignatureStatus.VIEWED,
+                    SignatureStatus.IN_PROGRESS
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      };
+    }
+    if (filter === 'COMPLETED') {
+      return {
+        OR: [
+          { status: SendRequestStatus.COMPLETED },
+          { signatures: { some: { status: SignatureStatus.FINISHED } } }
+        ]
+      };
+    }
+    if (filter === 'ATTENTION') {
+      return {
+        OR: [
+          { status: { in: [SendRequestStatus.FAILED, SendRequestStatus.CANCELED] } },
+          { signatures: { some: { archiveStatus: ArchiveStatus.FAILED } } },
+          {
+            signatures: {
+              some: {
+                status: {
+                  in: [
+                    SignatureStatus.DECLINED,
+                    SignatureStatus.ERROR,
+                    SignatureStatus.CANCELED
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      };
+    }
+    return undefined;
+  }
+
   async createDraft(dto: CreateSendRequestDto, requestedByUserId?: string) {
-    await this.bitrix.getUser(dto.employeeBitrixUserId);
-    const bitrixId = String(dto.employeeBitrixUserId);
-    const cpf = dto.cpf.trim();
+    const profile = await this.employeeProfile(dto.employeeBitrixUserId);
+    const bitrixId = profile.bitrixId;
+    const cpf = this.validCpf(dto.cpf);
     const byBitrixId = await this.prisma.employee.findUnique({ where: { bitrixId } });
-    const email = this.employeeEmail(dto, byBitrixId?.email);
+    const email = profile.email;
     const [byEmail, byCpf] = await Promise.all([
       this.prisma.employee.findUnique({ where: { email } }),
       this.prisma.employee.findUnique({ where: { cpf } })
@@ -71,11 +193,11 @@ export class SendRequestsService {
     const existing = byBitrixId || byEmail || byCpf;
     const employeeData = {
       bitrixId,
-      nome: dto.employeeName.trim(),
+      nome: profile.name,
       email,
       cpf,
-      cargo: dto.cargo?.trim() || null,
-      departamento: dto.departamento?.trim() || null
+      cargo: profile.cargo,
+      departamento: profile.departamento
     };
     const employee = existing
       ? await this.prisma.employee.update({ where: { id: existing.id }, data: employeeData })
@@ -93,8 +215,8 @@ export class SendRequestsService {
         triggerType: SendTriggerType.MANUAL,
         status: SendRequestStatus.DRAFT,
         requestedByUserId,
-        employeeSnapshot: this.toJson(this.employeeSnapshot(dto)),
-        documentData: this.toJson({ city: dto.city || 'Sao Paulo' }),
+        employeeSnapshot: this.toJson(this.employeeSnapshot(profile, cpf)),
+        documentData: this.toJson({ city: 'Sao Paulo' }),
         equipment: {
           create: dto.equipment.map((item, index) => ({
             itemNumber: index + 1,
@@ -110,7 +232,7 @@ export class SendRequestsService {
     });
     return this.prisma.sendRequest.update({
       where: { id: request.id },
-      data: { documentFileName: responsibilityTermFileName(dto.employeeName) },
+      data: { documentFileName: responsibilityTermFileName(profile.name) },
       include: {
         employee: true,
         equipment: true,
@@ -125,8 +247,9 @@ export class SendRequestsService {
     if (String(dto.employeeBitrixUserId) !== request.employee.bitrixId) {
       throw new BadRequestException('Nao e permitido trocar o colaborador de um rascunho; crie outro');
     }
-    const email = this.employeeEmail(dto, request.employee.email);
-    const cpf = dto.cpf.trim();
+    const profile = await this.employeeProfile(dto.employeeBitrixUserId);
+    const email = profile.email;
+    const cpf = this.validCpf(dto.cpf);
     const notificationRecipients = await this.resolveNotificationRecipients(
       dto.notificationRecipientBitrixUserIds || []
     );
@@ -144,8 +267,11 @@ export class SendRequestsService {
       this.prisma.employee.update({
         where: { id: request.employeeId },
         data: {
-          nome: dto.employeeName.trim(), email, cpf,
-          cargo: dto.cargo?.trim() || null, departamento: dto.departamento?.trim() || null
+          nome: profile.name,
+          email,
+          cpf,
+          cargo: profile.cargo,
+          departamento: profile.departamento
         }
       }),
       this.prisma.sendRequestEquipment.deleteMany({ where: { sendRequestId: id } }),
@@ -154,9 +280,9 @@ export class SendRequestsService {
         where: { id },
         data: {
           status: SendRequestStatus.DRAFT,
-          employeeSnapshot: this.toJson(this.employeeSnapshot(dto)),
-          documentData: this.toJson({ city: dto.city || 'Sao Paulo' }),
-          documentFileName: responsibilityTermFileName(dto.employeeName),
+          employeeSnapshot: this.toJson(this.employeeSnapshot(profile, cpf)),
+          documentData: this.toJson({ city: 'Sao Paulo' }),
+          documentFileName: responsibilityTermFileName(profile.name),
           unsignedStoragePath: null,
           unsignedSha256: null,
           equipment: {
@@ -448,90 +574,207 @@ export class SendRequestsService {
   }
 
   async removeFromHistory(id: string, actorUserId?: string) {
-    const request = await this.prisma.sendRequest.findUnique({
-      where: { id },
-      include: {
-        signatures: {
-          include: { invitation: true }
-        }
-      }
-    });
-    if (!request || request.removedAt) {
-      throw new NotFoundException('Solicitacao de envio nao encontrada');
-    }
-    const now = new Date();
-    const activeStatuses: SignatureStatus[] = [
-      SignatureStatus.PENDING,
-      SignatureStatus.SENT,
-      SignatureStatus.VIEWED,
-      SignatureStatus.IN_PROGRESS
-    ];
-    const activeSignatureIds = request.signatures
-      .filter((signature) => activeStatuses.includes(signature.status))
-      .map((signature) => signature.id);
-    const completed = request.signatures.some((signature) =>
-      signature.status === SignatureStatus.FINISHED
-    );
-
-    await this.prisma.$transaction(async (transaction) => {
-      if (activeSignatureIds.length) {
-        await transaction.signingInvitation.updateMany({
-          where: {
-            signatureId: { in: activeSignatureIds },
-            completedAt: null,
-            revokedAt: null
-          },
-          data: { revokedAt: now }
-        });
-        await transaction.signature.updateMany({
-          where: { id: { in: activeSignatureIds } },
-          data: {
-            status: SignatureStatus.CANCELED,
-            canceledAt: now,
-            bitrixStage: 'Cancelado ao remover do historico'
-          }
-        });
-      }
-      await transaction.sendRequest.update({
-        where: { id },
-        data: {
-          removedAt: now,
-          removedByUserId: actorUserId || null,
-          status: completed
-            ? SendRequestStatus.COMPLETED
-            : activeSignatureIds.length
-              ? SendRequestStatus.CANCELED
-              : request.status
-        }
-      });
-      await transaction.auditEvent.create({
-        data: {
-          actorUserId: actorUserId || null,
-          entityType: 'SEND_REQUEST',
-          entityId: id,
-          action: 'REMOVED_FROM_HISTORY',
-          before: this.toJson({ status: request.status, removedAt: null }),
-          after: this.toJson({
-            status: completed
-              ? SendRequestStatus.COMPLETED
-              : activeSignatureIds.length
-                ? SendRequestStatus.CANCELED
-                : request.status,
-            removedAt: now.toISOString()
-          }),
-          metadata: this.toJson({
-            completedDocumentPreserved: completed,
-            activeInvitationsRevoked: activeSignatureIds.length
-          })
-        }
-      });
-    });
+    const result = await this.bulkRemoveFromHistory([id], actorUserId);
+    const removed = result.items.find((item) => item.id === id);
+    if (!removed) throw new NotFoundException('Solicitacao de envio nao encontrada');
     return {
       id,
       removed: true,
-      completedDocumentPreserved: completed,
-      activeInvitationsRevoked: activeSignatureIds.length
+      completedDocumentPreserved: removed.completedDocumentPreserved,
+      activeInvitationsRevoked: removed.activeInvitationsRevoked
     };
+  }
+
+  async bulkRemoveFromHistory(ids: string[], actorUserId?: string) {
+    const requestedIds = [...new Set(ids)].sort();
+    const batchId = randomUUID();
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (transaction) => {
+          const requests = await transaction.sendRequest.findMany({
+            where: { id: { in: requestedIds } },
+            include: {
+              employee: { select: { nome: true } },
+              signatures: { include: { invitation: true } }
+            }
+          });
+          const byId = new Map(requests.map((request) => [request.id, request]));
+          const ignoredIds = requestedIds.filter((id) => !byId.get(id) || byId.get(id)!.removedAt);
+          const candidates = requestedIds
+            .map((id) => byId.get(id))
+            .filter((request): request is NonNullable<typeof request> => Boolean(request && !request.removedAt));
+          const blocked = candidates.filter((request) =>
+            request.signatures.some((signature) => this.awaitingRequiredArchive(signature))
+          );
+          if (blocked.length) {
+            throw new ConflictException({
+              message: 'Existem termos assinados que ainda precisam ser salvos no Drive antes da remocao',
+              blockedIds: blocked.map((request) => request.id),
+              blockedEmployees: blocked.map((request) => request.employee.nome)
+            });
+          }
+
+          const now = new Date();
+          const activeStatuses: SignatureStatus[] = [
+            SignatureStatus.PENDING,
+            SignatureStatus.SENT,
+            SignatureStatus.VIEWED,
+            SignatureStatus.IN_PROGRESS
+          ];
+          const items: Array<{
+            id: string;
+            completedDocumentPreserved: boolean;
+            activeInvitationsRevoked: number;
+          }> = [];
+
+          for (const request of candidates) {
+            let activeInvitationsRevoked = 0;
+            let completedDocumentPreserved = request.signatures.some((signature) =>
+              this.hasPreservedSignature(signature.status)
+            );
+
+            for (const signature of request.signatures) {
+              if (!activeStatuses.includes(signature.status)) continue;
+              let mayCancel = !signature.invitation;
+              if (signature.invitation) {
+                const revoked = await transaction.signingInvitation.updateMany({
+                  where: {
+                    signatureId: signature.id,
+                    completedAt: null,
+                    revokedAt: null
+                  },
+                  data: { revokedAt: now }
+                });
+                mayCancel = revoked.count === 1;
+                activeInvitationsRevoked += revoked.count;
+              }
+              if (mayCancel) {
+                const canceled = await transaction.signature.updateMany({
+                  where: { id: signature.id, status: { in: activeStatuses } },
+                  data: {
+                    status: SignatureStatus.CANCELED,
+                    canceledAt: now,
+                    bitrixStage: 'Cancelado ao remover do historico'
+                  }
+                });
+                if (canceled.count === 1) {
+                  await transaction.signatureEvent.create({
+                    data: {
+                      signatureId: signature.id,
+                      eventType: 'REMOVED_FROM_HISTORY',
+                      status: SignatureStatus.CANCELED,
+                      bitrixStage: 'Cancelado por remocao logica do historico',
+                      payload: { batchId }
+                    }
+                  });
+                  continue;
+                }
+              }
+
+              const current = await transaction.signature.findUnique({
+                where: { id: signature.id },
+                select: { status: true, archiveStatus: true }
+              });
+              if (current && this.awaitingRequiredArchive(current)) {
+                throw new ConflictException({
+                  message: `O termo de ${request.employee.nome} foi assinado e precisa ser salvo no Drive antes da remocao`,
+                  blockedIds: [request.id],
+                  blockedEmployees: [request.employee.nome]
+                });
+              }
+              completedDocumentPreserved ||= Boolean(
+                current && this.hasPreservedSignature(current.status)
+              );
+            }
+
+            const removed = await transaction.sendRequest.updateMany({
+              where: { id: request.id, removedAt: null },
+              data: {
+                removedAt: now,
+                removedByUserId: actorUserId || null,
+                status: completedDocumentPreserved
+                  ? SendRequestStatus.COMPLETED
+                  : activeInvitationsRevoked
+                    ? SendRequestStatus.CANCELED
+                    : request.status
+              }
+            });
+            if (removed.count !== 1) {
+              ignoredIds.push(request.id);
+              continue;
+            }
+            await transaction.auditEvent.create({
+              data: {
+                actorUserId: actorUserId || null,
+                entityType: 'SEND_REQUEST',
+                entityId: request.id,
+                action: 'REMOVED_FROM_HISTORY',
+                before: this.toJson({ status: request.status, removedAt: null }),
+                after: this.toJson({
+                  status: completedDocumentPreserved
+                    ? SendRequestStatus.COMPLETED
+                    : activeInvitationsRevoked
+                      ? SendRequestStatus.CANCELED
+                      : request.status,
+                  removedAt: now.toISOString()
+                }),
+                metadata: this.toJson({
+                  batchId,
+                  completedDocumentPreserved,
+                  activeInvitationsRevoked
+                })
+              }
+            });
+            items.push({
+              id: request.id,
+              completedDocumentPreserved,
+              activeInvitationsRevoked
+            });
+          }
+
+          return {
+            batchId,
+            requestedCount: requestedIds.length,
+            removedCount: items.length,
+            ignoredCount: ignoredIds.length,
+            activeInvitationsRevoked: items.reduce(
+              (total, item) => total + item.activeInvitationsRevoked,
+              0
+            ),
+            completedDocumentsPreserved: items.filter(
+              (item) => item.completedDocumentPreserved
+            ).length,
+            removedIds: items.map((item) => item.id),
+            ignoredIds: [...new Set(ignoredIds)].sort(),
+            items
+          };
+        }, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 5_000,
+          timeout: 20_000
+        });
+      } catch (error) {
+        if (attempt < 3 && this.isRetryableTransactionError(error)) continue;
+        throw error;
+      }
+    }
+    throw new ConflictException('Nao foi possivel concluir a remocao concorrente');
+  }
+
+  private awaitingRequiredArchive(signature: {
+    status: SignatureStatus;
+    archiveStatus: ArchiveStatus;
+  }) {
+    return signature.status === SignatureStatus.SIGNED
+      && signature.archiveStatus !== ArchiveStatus.ARCHIVED;
+  }
+
+  private hasPreservedSignature(status: SignatureStatus) {
+    return status === SignatureStatus.SIGNED || status === SignatureStatus.FINISHED;
+  }
+
+  private isRetryableTransactionError(error: unknown) {
+    return (error as { code?: string } | undefined)?.code === 'P2034';
   }
 
   private async getEditable(id: string) {
@@ -566,21 +809,44 @@ export class SendRequestsService {
     return result;
   }
 
-  private employeeSnapshot(dto: CreateSendRequestDto) {
+  private employeeSnapshot(profile: {
+    bitrixId: string;
+    name: string;
+    email: string;
+    cargo: string | null;
+    departamento: string | null;
+  }, cpf: string) {
     return {
-      bitrixUserId: dto.employeeBitrixUserId,
-      name: dto.employeeName.trim(),
-      email: dto.employeeEmail?.trim().toLowerCase() || null,
-      cpf: dto.cpf.trim(),
-      cargo: dto.cargo?.trim() || null,
-      departamento: dto.departamento?.trim() || null
+      bitrixUserId: Number(profile.bitrixId),
+      name: profile.name,
+      email: profile.email,
+      cpf,
+      cargo: profile.cargo,
+      departamento: profile.departamento
     };
   }
 
-  private employeeEmail(dto: CreateSendRequestDto, existingEmail?: string) {
-    return dto.employeeEmail?.trim().toLowerCase()
-      || existingEmail
-      || `bitrix-${dto.employeeBitrixUserId}@local.invalid`;
+  private async employeeProfile(bitrixUserId: number) {
+    const user = await this.bitrix.getUserWithDepartment(bitrixUserId);
+    const name = [user.NAME, user.LAST_NAME].filter(Boolean).join(' ').trim();
+    const email = user.EMAIL?.trim().toLowerCase() || '';
+    if (!name) throw new BadRequestException('O perfil do colaborador no Bitrix24 nao possui nome');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('O perfil do colaborador no Bitrix24 nao possui e-mail valido');
+    }
+    return {
+      bitrixId: String(user.ID),
+      name,
+      email,
+      cargo: user.WORK_POSITION?.trim() || null,
+      departamento: user.DEPARTMENT_NAME?.trim() || null
+    };
+  }
+
+  private validCpf(value: string) {
+    const cpf = normalizeResponsibilityCpf(value);
+    if (!cpf) throw new BadRequestException('CPF invalido');
+    return cpf;
   }
 
   private toJson(value: unknown): Prisma.InputJsonValue {
@@ -596,6 +862,21 @@ export function responsibilityTermFileName(fullName: string) {
     .filter(Boolean)
     .join('_') || 'Colaborador';
   return `TR.${safeName}.pdf`;
+}
+
+export function normalizeResponsibilityCpf(value: string) {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return null;
+  const digit = (length: number) => {
+    let sum = 0;
+    for (let index = 0; index < length; index += 1) {
+      sum += Number(digits[index]) * (length + 1 - index);
+    }
+    const result = (sum * 10) % 11;
+    return result === 10 ? 0 : result;
+  };
+  if (digit(9) !== Number(digits[9]) || digit(10) !== Number(digits[10])) return null;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
 export function signingUrlForCurrentUser(

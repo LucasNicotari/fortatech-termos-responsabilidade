@@ -6,10 +6,12 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { SigningJwtStrategy } from './signing-jwt.strategy';
+import { WorkflowModule } from '../workflow/workflow.module';
 
 @Module({
   imports: [
     PassportModule,
+    WorkflowModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {

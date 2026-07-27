@@ -5,6 +5,12 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
     environment:
       PGPASSWORD: fortatech
     command:

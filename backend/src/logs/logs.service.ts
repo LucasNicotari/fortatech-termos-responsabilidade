@@ -93,7 +93,10 @@ export class LogsService {
       data: {
         ...data,
         payload: this.toJson(this.redact(data.payload)),
-        response: this.toJson(this.redact(data.response))
+        response: this.toJson(this.redact(data.response)),
+        error: typeof data.error === 'string'
+          ? String(this.redact(data.error))
+          : data.error
       }
     });
   }

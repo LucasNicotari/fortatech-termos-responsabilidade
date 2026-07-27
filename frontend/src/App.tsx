@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { PageShell } from './components/PageShell';
 import { useAuth } from './contexts/AuthContext';
 
@@ -32,6 +32,11 @@ function SignerProtected() {
   return <InternalSigning />;
 }
 
+function OperatorProtected() {
+  const { user } = useAuth();
+  return user?.canOperate ? <Outlet /> : <Navigate to="/" replace />;
+}
+
 export function App() {
   return (
     <Suspense fallback={<main className="p-8 text-steel">Carregando...</main>}>
@@ -41,7 +46,9 @@ export function App() {
         <Route element={<Protected />}>
           <Route index element={<Dashboard />} />
           <Route path="/employees" element={<Navigate to="/settings" replace />} />
-          <Route path="/send-requests" element={<SendRequests />} />
+          <Route element={<OperatorProtected />}>
+            <Route path="/send-requests" element={<SendRequests />} />
+          </Route>
           <Route path="/terms" element={<Signatures />} />
           <Route path="/signatures" element={<Navigate to="/terms" replace />} />
           <Route path="/templates" element={<Navigate to="/settings?tab=templates" replace />} />

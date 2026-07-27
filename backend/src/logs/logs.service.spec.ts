@@ -35,4 +35,19 @@ describe('LogsService', () => {
       nested: { password: '[REDACTED]' }
     });
   });
+
+  it('remove convites pessoais tambem das mensagens de erro', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'log-3' });
+    const service = new LogsService({ integrationLog: { create } } as never);
+    const secret = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG';
+
+    await service.create({
+      type: 'BITRIX_ERROR',
+      source: 'bitrix',
+      error: `Falha em https://portal.example/app?launchCode=${secret}`
+    });
+
+    expect(create.mock.calls[0][0].data.error).not.toContain(secret);
+    expect(create.mock.calls[0][0].data.error).toContain('launchCode=[REDACTED]');
+  });
 });

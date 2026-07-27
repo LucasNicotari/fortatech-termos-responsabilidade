@@ -4,11 +4,13 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/http-exception.filter';
-import { Request, Response, NextFunction } from 'express';
+import { json, NextFunction, Request, Response, urlencoded } from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
+  app.use(json({ limit: '1.5mb' }));
+  app.use(urlencoded({ extended: true, limit: '256kb' }));
 
   const allowedOrigins = (config.get<string>('CORS_ORIGINS') || config.get<string>('FRONTEND_URL') || '')
     .split(',').map((item) => item.trim()).filter(Boolean);

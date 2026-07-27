@@ -20,14 +20,17 @@ user_basic
 department
 im
 placement
+disk
 ```
 
 - `im` permite enviar a mensagem ao chat pessoal com `im.message.add`.
 - `placement` permite registrar `REST_APP_URI`, usado para abrir o link em um slider do portal.
+- `disk` permite confirmar o PDF final no Drive configurado.
 - `user`, `user_basic` e `department` identificam o colaborador e completam os dados do termo.
 
 Os escopos `crm` e `sign.b2e` nao sao necessarios para novos documentos. Eles podem permanecer
-temporariamente enquanto registros antigos do B2E ainda precisarem ser consultados.
+temporariamente enquanto registros antigos do B2E ainda precisarem ser consultados, mas não
+devem ser descritos como parte do fluxo atual.
 
 Depois de alterar os escopos, salve e reinstale o aplicativo local para o Bitrix24 emitir um novo
 OAuth. Os caminhos continuam:
@@ -43,7 +46,8 @@ https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/install
 ## Fluxo de envio
 
 1. Um operador cria o termo e escolhe o colaborador.
-2. O operador escolhe zero ou mais pessoas a notificar. Nao existe limite fixo no FortaDocs.
+2. O operador escolhe as pessoas a notificar. A API possui um teto técnico de 5.000 IDs por
+   termo para impedir payloads ilimitados; no uso normal a lista deve permanecer pequena.
 3. A API gera o PDF, grava-o no bucket privado e cria um convite aleatorio valido por sete dias.
 4. Apenas o SHA-256 do token do convite fica no banco.
    Textos técnicos de log mascaram automaticamente qualquer `params[signing]`.
@@ -57,6 +61,8 @@ https://fortatech-termos-api-hml.onrender.com/integrations/bitrix/install
 7. `im.notify.personal.add` cria também um alerta clicável no sino do Bitrix24. A falha desse
    alerta secundário não invalida a mensagem já entregue no chat.
 8. O Bitrix24 abre o link dentro do portal e envia `PLACEMENT_OPTIONS` ao backend.
+   Se essa primeira chamada vier apenas com `DOMAIN/APP_SID`, uma ponte HTML obtém OAuth pelo SDK
+   `BX24` e repete a abertura uma única vez; contexto incompleto nunca é exibido como JSON bruto.
 9. O backend consulta `user.current` e confere:
 
    - token valido;
@@ -89,8 +95,9 @@ A lista e propria de cada termo. A configuracao global de usuarios serve apenas 
 inicial; no passo de revisao o operador pode remover ou adicionar qualquer usuario ativo,
 inclusive a si mesmo.
 
-Os selecionados recebem notificacao no envio e na conclusao. A trilha de eventos impede a mesma
-notificacao de ser registrada duas vezes para o mesmo usuario e estado.
+Os selecionados recebem notificacao no envio e na conclusao. A consulta à trilha reduz
+duplicações em uma única instância, mas ainda não existe restrição `UNIQUE` nem outbox que garanta
+idempotência forte sob concorrência entre réplicas.
 
 Quem criou o termo tambem recebe automaticamente a notificacao de conclusao, mesmo que nao tenha
 sido marcado manualmente. Ao reabrir um convite concluido, o colaborador ve que a assinatura ja
@@ -107,10 +114,32 @@ A saudação da mensagem usa o nome consultado diretamente pelo ID do usuário n
 informa a origem FortaTech, orienta a revisão, destaca o botão de assinatura e registra que o
 convite é pessoal, intransferível e válido por sete dias.
 
+## Arquivamento e conclusão
+
+Depois da assinatura, o PDF final permanece no bucket privado e é enviado ao Drive pessoal
+indicado por `BITRIX_DRIVE_OWNER_USER_ID`, na pasta `BITRIX_DRIVE_FOLDER_NAME`. Na homologação,
+os valores atuais são `8465` e `Termo de Responsabilidade`; ambos permanecem parametrizados. Os
+estados exibidos são:
+
+- **Enviado** quando o chat aceita o convite;
+- **Visualizado** na primeira abertura autenticada;
+- **Assinado** quando a assinatura é incorporada e os hashes são persistidos;
+- **Concluído** somente quando o Drive confirma o arquivo.
+
+Se o Drive falhar, o termo continua **Assinado**, com arquivamento `FAILED`, e um operador pode
+tentar novamente. Ele não pode ser removido da visão operacional enquanto essa pendência existir.
+
+## Alternativas desativadas
+
+Bitrix Sign B2E exigia fluxo próprio, escopos `crm`/`sign.b2e` e participação de representante.
+ZapSign usava e-mail e webhook externos. Ambos são legado/alternativa desativada; novos termos
+não dependem deles e somente o colaborador assina no FortaDocs.
+
 ## Compatibilidade
 
 Registros historicos com provedor `BITRIX` ou `ZAPSIGN` continuam legiveis. Novos registros usam
-`FORTADOCS`. Nenhum documento historico e convertido ou apagado pela migration.
+`FORTADOCS` no ambiente real. O simulador local reutiliza o adaptador/enum `ZAPSIGN`, sem acesso
+à API externa. Nenhum documento historico e convertido ou apagado pela migration.
 
 ## Referencias oficiais
 

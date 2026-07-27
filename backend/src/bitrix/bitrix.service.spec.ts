@@ -202,7 +202,9 @@ describe('BitrixService sign.b2e', () => {
 
     const logged = logs.create.mock.calls[0][0].payload;
     expect(JSON.stringify(logged)).not.toContain('very-sensitive-base64');
-    expect(logged.fileContent).toEqual(['term.pdf', '[base64:21]']);
+    expect(logged.fileBytesBase64).toBe(21);
+    expect(logged.parameterKeys).toContain('fileContent');
+    expect(JSON.stringify(logged)).not.toContain('term.pdf');
   });
 
   it('coalesces concurrent OAuth refreshes and rotates both tokens', async () => {

@@ -12,21 +12,45 @@ export class DashboardService {
       pending,
       sent,
       signed,
-      sendErrors,
-      signatureErrors,
+      errors,
       latestSignatures
     ] = await Promise.all([
-      this.prisma.employee.count(),
-      this.prisma.sendRequest.count({ where: { removedAt: null, status: { in: [SendRequestStatus.DRAFT, SendRequestStatus.READY, SendRequestStatus.PENDING, SendRequestStatus.SENDING, SendRequestStatus.SENT, SendRequestStatus.VIEWED, SendRequestStatus.IN_PROGRESS] } } }),
+      this.prisma.employee.count({
+        where: { sendRequests: { some: { removedAt: null } } }
+      }),
+      this.prisma.sendRequest.count({
+        where: {
+          removedAt: null,
+          status: {
+            in: [
+              SendRequestStatus.DRAFT,
+              SendRequestStatus.READY,
+              SendRequestStatus.PENDING,
+              SendRequestStatus.SENDING,
+              SendRequestStatus.VIEWED,
+              SendRequestStatus.IN_PROGRESS,
+              SendRequestStatus.SIGNED
+            ]
+          }
+        }
+      }),
       this.prisma.sendRequest.count({ where: { removedAt: null, status: SendRequestStatus.SENT } }),
       this.prisma.signature.count({ where: { sendRequest: { removedAt: null }, status: SignatureStatus.FINISHED } }),
-      this.prisma.sendRequest.count({ where: { removedAt: null, status: SendRequestStatus.FAILED } }),
-      this.prisma.signature.count({
+      this.prisma.sendRequest.count({
         where: {
-          sendRequest: { removedAt: null },
+          removedAt: null,
           OR: [
-            { status: SignatureStatus.ERROR },
-            { archiveStatus: ArchiveStatus.FAILED }
+            { status: SendRequestStatus.FAILED },
+            {
+              signatures: {
+                some: {
+                  OR: [
+                    { status: SignatureStatus.ERROR },
+                    { archiveStatus: ArchiveStatus.FAILED }
+                  ]
+                }
+              }
+            }
           ]
         }
       }),
@@ -35,8 +59,18 @@ export class DashboardService {
         orderBy: { updatedAt: 'desc' },
         take: 10,
         include: {
-          employee: true,
-          sendRequest: true,
+          employee: {
+            select: { id: true, bitrixId: true, nome: true, email: true }
+          },
+          sendRequest: {
+            select: {
+              id: true,
+              status: true,
+              documentFileName: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          },
           templateVersion: { include: { template: true } }
         }
       })
@@ -47,7 +81,7 @@ export class DashboardService {
       pending,
       sent,
       signed,
-      errors: sendErrors + signatureErrors,
+      errors,
       latestSignatures
     };
   }

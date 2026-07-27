@@ -2,7 +2,11 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
-import { libreOfficeConversionArguments } from './documents.service';
+import {
+  DocumentsService,
+  libreOfficeConversionArguments,
+  responsibilityDateParts
+} from './documents.service';
 import {
   formatResponsibilityTemplateXml,
   parameterizeResponsibilityTemplateXml,
@@ -19,6 +23,40 @@ describe('DocumentsService template parameterization', () => {
     expect(second[1]).toContain('conversion-b/libreoffice-profile');
     expect(first[1]).not.toBe(second[1]);
     expect(first).toEqual(expect.arrayContaining(['--headless', '--convert-to', 'pdf']));
+  });
+
+  it('uses the Sao Paulo calendar date consistently around UTC midnight', () => {
+    expect(responsibilityDateParts(new Date('2026-07-01T01:30:00.000Z'))).toEqual({
+      day: '30',
+      month: 'JUNHO',
+      year: 2026
+    });
+  });
+
+  it('serializes PDF conversions by default to bound LibreOffice memory', async () => {
+    const service = new DocumentsService(
+      { get: jest.fn().mockReturnValue(undefined) } as never,
+      {} as never,
+      {} as never
+    );
+    const gate = service as unknown as {
+      acquireConversionSlot: () => Promise<void>;
+      releaseConversionSlot: () => void;
+    };
+    let running = 0;
+    let maximum = 0;
+    const task = async () => {
+      await gate.acquireConversionSlot();
+      running += 1;
+      maximum = Math.max(maximum, running);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      running -= 1;
+      gate.releaseConversionSlot();
+    };
+
+    await Promise.all([task(), task(), task()]);
+
+    expect(maximum).toBe(1);
   });
 
   it('replaces legacy identity fields and converts equipment rows into a loop', () => {

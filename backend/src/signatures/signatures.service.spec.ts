@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 import {
   findCenteredSignatureLineY,
   handwrittenSignaturePlacement,
+  mapWithConcurrency,
   SignaturesService
 } from './signatures.service';
 
@@ -59,6 +60,21 @@ describe('SignaturesService status mapping', () => {
       .rejects.toThrow('Assinatura precisa ser uma imagem PNG valida');
   });
 
+  it('rejeita PNG comprimido com dimensoes excessivas antes de incorporar ao PDF', async () => {
+    const apply = (service as unknown as {
+      applyHandwrittenSignature: (pdf: Buffer, signature: string) => Promise<Buffer>;
+    }).applyHandwrittenSignature.bind(service);
+    const oversized = Buffer.alloc(24);
+    Buffer.from('89504e470d0a1a0a', 'hex').copy(oversized);
+    oversized.writeUInt32BE(5_000, 16);
+    oversized.writeUInt32BE(100, 20);
+
+    await expect(apply(
+      Buffer.from('%PDF'),
+      `data:image/png;base64,${oversized.toString('base64')}`
+    )).rejects.toThrow('Dimensoes da assinatura excedem o limite permitido');
+  });
+
   it('localiza a linha central do colaborador mesmo quando o bloco muda de altura', () => {
     const content = `
       q 1 0 0 1 200 716.989 cm
@@ -77,5 +93,20 @@ describe('SignaturesService status mapping', () => {
     expect(placement.x + placement.width / 2).toBeCloseTo(595 / 2, 5);
     expect(placement.height).toBeLessThanOrEqual(22);
     expect(placement.y).toBeGreaterThan(700);
+  });
+
+  it('limita a concorrencia das sincronizacoes sem perder a ordem dos resultados', async () => {
+    let running = 0;
+    let maximum = 0;
+    const results = await mapWithConcurrency([1, 2, 3, 4, 5, 6], 2, async (value) => {
+      running += 1;
+      maximum = Math.max(maximum, running);
+      await new Promise((resolve) => setTimeout(resolve, 3));
+      running -= 1;
+      return value * 2;
+    });
+
+    expect(maximum).toBe(2);
+    expect(results).toEqual([2, 4, 6, 8, 10, 12]);
   });
 });

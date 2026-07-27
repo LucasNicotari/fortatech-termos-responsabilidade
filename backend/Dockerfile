@@ -8,6 +8,11 @@ WORKDIR /app
 COPY backend/package*.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 
+FROM base AS node-runtime
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends binutils \
+  && strip --strip-unneeded /usr/local/bin/node
+
 FROM base AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -21,10 +26,19 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 RUN rm -rf \
     node_modules/@prisma/client/runtime/*wasm* \
-    node_modules/@prisma/engines/libquery_engine* \
     node_modules/prisma/prisma-client \
     node_modules/effect/src \
     node_modules/typescript \
+  && rm -f \
+    node_modules/.prisma/client/query_engine_bg.wasm \
+    node_modules/prisma/build/query_engine_bg.*.wasm \
+    node_modules/prisma/build/query_compiler_bg.*.wasm \
+  && client_engine="$(find node_modules/.prisma/client -maxdepth 1 -name 'libquery_engine*.so.node' -print -quit)" \
+  && cli_engine="node_modules/@prisma/engines/$(basename "$client_engine")" \
+  && test -n "$client_engine" \
+  && test -f "$cli_engine" \
+  && rm "$cli_engine" \
+  && ln -s "../../.prisma/client/$(basename "$client_engine")" "$cli_engine" \
   && find node_modules -type f \( \
     -name '*.map' -o \
     -name '*.d.ts' -o \
@@ -50,7 +64,7 @@ RUN apt-get update \
   && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin node \
   && mkdir -p /app/storage-data /templates \
   && chown -R node:node /app /templates /home/node
-COPY --from=base /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --chown=node:node backend/package*.json ./
 COPY --chown=node:node --from=production-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/dist ./dist

@@ -54,7 +54,19 @@ export class BitrixIntegrationsController {
     @Query() query: Record<string, unknown>,
     @Res() response: Response
   ) {
-    const launch = await this.integrations.createLaunch(this.withBitrixQueryContext(body, query));
+    const payload = this.withBitrixQueryContext(body, query);
+    if (!this.hasLaunchContext(payload)) {
+      if (String(body._bridge_attempt || '') === '1') {
+        response.send(this.bitrixErrorPage(
+          'Não foi possível autenticar pelo Bitrix24',
+          'Feche esta janela e abra o FortaDocs novamente pelo menu do portal. Se persistir, reinstale o aplicativo.'
+        ));
+        return;
+      }
+      response.send(this.bitrixPostBridge('Obtendo a autorização do Bitrix24...'));
+      return;
+    }
+    const launch = await this.integrations.createLaunch(payload);
     const destination = new URL(launch.frontendUrl);
     destination.searchParams.set('launchCode', launch.code);
     response.send(`<!doctype html><html><head><meta charset="utf-8"><title>Fortatech Termos</title></head><body><script>window.location.replace(${JSON.stringify(destination.toString())});</script></body></html>`);
@@ -109,6 +121,7 @@ export class BitrixIntegrationsController {
             expiresIn = Math.max(1, Math.floor((expiresIn - Date.now()) / 1000));
           }
           var values = Object.assign({}, auth, {
+            _bridge_attempt: '1',
             expires_in: expiresIn || 3600,
             domain: domain,
             DOMAIN: domain,
@@ -165,5 +178,43 @@ export class BitrixIntegrationsController {
       ...body,
       DOMAIN: bodyDomain || String(query.DOMAIN || query.domain || '')
     };
+  }
+
+  private hasLaunchContext(payload: Record<string, unknown>) {
+    const auth = payload.auth && typeof payload.auth === 'object'
+      ? payload.auth as Record<string, unknown>
+      : {};
+    return Boolean(
+      String(payload.AUTH_ID || auth.access_token || '')
+      && String(payload.member_id || auth.member_id || '')
+      && String(payload.DOMAIN || payload.domain || auth.domain || '')
+    );
+  }
+
+  private bitrixErrorPage(title: string, message: string) {
+    return `<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FortaDocs</title>
+    <style>
+      body { margin: 0; background: #f4f7f9; color: #34455b; font: 14px Arial, sans-serif; }
+      main { max-width: 520px; margin: 64px auto; padding: 32px; border: 1px solid #dfe6ec;
+        border-radius: 12px; background: #fff; text-align: center; }
+      h1 { margin: 0 0 12px; color: #172b4d; font-size: 20px; }
+      p { margin: 0; line-height: 1.55; }
+      button { margin-top: 24px; border: 0; border-radius: 6px; padding: 10px 16px;
+        background: #2fc6f5; color: #fff; cursor: pointer; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${title}</h1>
+      <p>${message}</p>
+      <button type="button" onclick="window.location.reload()">Tentar novamente</button>
+    </main>
+  </body>
+</html>`;
   }
 }

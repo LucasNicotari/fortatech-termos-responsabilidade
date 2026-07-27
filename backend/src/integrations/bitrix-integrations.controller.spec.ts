@@ -52,6 +52,45 @@ describe('BitrixIntegrationsController browser bridge', () => {
     }));
   });
 
+  it('uses the SDK bridge when Bitrix sends an initial POST without OAuth context', async () => {
+    integrations.createLaunch.mockClear();
+    const target = response();
+
+    await controller.launch(
+      {},
+      {
+        DOMAIN: 'company.bitrix24.com.br',
+        PROTOCOL: '1',
+        LANG: 'br',
+        APP_SID: 'temporary'
+      },
+      target
+    );
+
+    const html = (target.send as jest.Mock).mock.calls[0][0] as string;
+    expect(html).toContain('Obtendo a autorização do Bitrix24...');
+    expect(html).toContain('BX24.getAuth');
+    expect(html).toContain("_bridge_attempt: '1'");
+    expect(integrations.createLaunch).not.toHaveBeenCalled();
+  });
+
+  it('shows a friendly page instead of JSON when the SDK still returns no context', async () => {
+    integrations.createLaunch.mockClear();
+    const target = response();
+
+    await controller.launch(
+      { _bridge_attempt: '1' },
+      { DOMAIN: 'company.bitrix24.com.br' },
+      target
+    );
+
+    const html = (target.send as jest.Mock).mock.calls[0][0] as string;
+    expect(html).toContain('Não foi possível autenticar pelo Bitrix24');
+    expect(html).toContain('Tentar novamente');
+    expect(html).not.toContain('statusCode');
+    expect(integrations.createLaunch).not.toHaveBeenCalled();
+  });
+
   it('finishes installation even when optional lifecycle events have warnings', async () => {
     integrations.install.mockResolvedValue({ warnings: ['event.get: insufficient_scope'] });
     const target = response();

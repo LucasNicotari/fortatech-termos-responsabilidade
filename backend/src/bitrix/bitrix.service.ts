@@ -25,6 +25,9 @@ import { TokenCryptoService } from './token-crypto.service';
 export class BitrixService {
   private readonly refreshes = new Map<string, Promise<BitrixInstallation>>();
   private readonly localMode: boolean;
+  private employeesCache?: { expiresAt: number; value: Promise<BitrixUser[]> };
+  private departmentsCache?: { expiresAt: number; value: Promise<BitrixDepartment[]> };
+  private readonly directoryCacheTtlMs = 60_000;
 
   constructor(
     private readonly http: HttpService,
@@ -87,7 +90,18 @@ export class BitrixService {
   }
 
   async listEmployees() {
-    return this.listUsers();
+    if (this.employeesCache && this.employeesCache.expiresAt > Date.now()) {
+      return this.employeesCache.value;
+    }
+    const value = this.listUsers().catch((error) => {
+      this.employeesCache = undefined;
+      throw error;
+    });
+    this.employeesCache = {
+      expiresAt: Date.now() + this.directoryCacheTtlMs,
+      value
+    };
+    return value;
   }
 
   async listEmployeesWithDepartments() {
@@ -110,6 +124,45 @@ export class BitrixService {
   }
 
   async listDepartments() {
+    if (this.departmentsCache && this.departmentsCache.expiresAt > Date.now()) {
+      return this.departmentsCache.value;
+    }
+    const value = this.fetchDepartments().catch((error) => {
+      this.departmentsCache = undefined;
+      throw error;
+    });
+    this.departmentsCache = {
+      expiresAt: Date.now() + this.directoryCacheTtlMs,
+      value
+    };
+    return value;
+  }
+
+  async getUserWithDepartment(userId: number) {
+    const user = this.publicUser(await this.getUser(userId));
+    try {
+      const departments = await this.listDepartments();
+      const names = new Map(departments.map((department) => [String(department.ID), department.NAME]));
+      return {
+        ...user,
+        DEPARTMENT_NAME: (user.UF_DEPARTMENT || [])
+          .map((id) => names.get(String(id)))
+          .filter(Boolean)
+          .join(', ')
+      };
+    } catch (error) {
+      const missingScope = error instanceof Error && /insufficient_scope/i.test(error.message);
+      return {
+        ...user,
+        DEPARTMENT_NAME: '',
+        DEPARTMENT_LOOKUP_ERROR: missingScope
+          ? 'MISSING_SCOPE' as const
+          : 'LOOKUP_FAILED' as const
+      };
+    }
+  }
+
+  private async fetchDepartments() {
     const departments = new Map<string, BitrixDepartment>();
     const pageSize = 50;
     const maxPages = 100;
@@ -135,7 +188,7 @@ export class BitrixService {
       const start = page * pageSize;
       const result = await this.call<BitrixUser[]>('user.get', { FILTER: { ACTIVE: true }, start });
       for (const user of result || []) {
-        if (user.ID) users.set(String(user.ID), user);
+        if (user.ID) users.set(String(user.ID), this.publicUser(user));
       }
       if (!result || result.length < pageSize) break;
     }
@@ -329,21 +382,41 @@ export class BitrixService {
   }
 
   private describePayload(params: Record<string, unknown>) {
-    const fields = params.fields as Record<string, unknown> | undefined;
-    const files = fields?.files as Array<{ fileName?: string; fileContent?: string }> | undefined;
     const fileContent = Array.isArray(params.fileContent)
       ? params.fileContent as unknown[]
       : undefined;
+    const technicalKeys = [
+      'ID', 'USER_ID', 'DIALOG_ID', 'ENTITY_ID', 'STORAGE_ID', 'FOLDER_ID',
+      'PARENT_ID', 'START', 'start', 'limit', 'offset', 'event', 'PLACEMENT',
+      'TAG', 'SUB_TAG', 'SYSTEM', 'URL_PREVIEW', 'sort', 'order'
+    ];
     return {
-      ...params,
-      fileContent: fileContent
-        ? [String(fileContent[0] || ''), `[base64:${String(fileContent[1] || '').length}]`]
+      parameterKeys: Object.keys(params)
+        .filter((key) => !/auth|token|secret|password/i.test(key))
+        .sort(),
+      ...Object.fromEntries(
+        technicalKeys
+          .filter((key) => params[key] !== undefined)
+          .map((key) => [key, params[key]])
+      ),
+      filterKeys: params.FILTER && typeof params.FILTER === 'object'
+        ? Object.keys(params.FILTER as Record<string, unknown>).sort()
         : undefined,
-      fields: fields ? {
-        ...fields,
-        files: files?.map((file) => ({ fileName: file.fileName, bytesBase64: file.fileContent?.length }))
-      } : undefined
+      fileBytesBase64: fileContent ? String(fileContent[1] || '').length : undefined,
+      hasMessage: typeof params.MESSAGE === 'string' || typeof params.MESSAGE_OUT === 'string'
     };
+  }
+
+  private publicUser(user: BitrixUser): BitrixUser {
+    const result: BitrixUser = { ID: String(user.ID) };
+    if (user.NAME !== undefined) result.NAME = user.NAME;
+    if (user.LAST_NAME !== undefined) result.LAST_NAME = user.LAST_NAME;
+    if (user.EMAIL !== undefined) result.EMAIL = user.EMAIL;
+    if (user.WORK_POSITION !== undefined) result.WORK_POSITION = user.WORK_POSITION;
+    if (user.PERSONAL_PHOTO !== undefined) result.PERSONAL_PHOTO = user.PERSONAL_PHOTO;
+    if (user.UF_DEPARTMENT !== undefined) result.UF_DEPARTMENT = user.UF_DEPARTMENT;
+    if (user.ACTIVE !== undefined) result.ACTIVE = user.ACTIVE;
+    return result;
   }
 
   private localCall(method: string, params: Record<string, unknown>) {

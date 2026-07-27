@@ -4,7 +4,14 @@ import { api } from '../services/api';
 interface AuthContextValue {
   token: string | null;
   accessMode: 'ADMIN' | 'SIGNER' | null;
-  user: { id?: string; name: string; email: string; role: string; bitrixUserId?: string } | null;
+  user: {
+    id?: string;
+    name: string;
+    email: string;
+    role: string;
+    bitrixUserId?: string;
+    canOperate: boolean;
+  } | null;
   loading: boolean;
   error: string | null;
   logout: () => void;

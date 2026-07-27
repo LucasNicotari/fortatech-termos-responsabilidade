@@ -13,6 +13,7 @@
     "local:down": "docker compose -f docker-compose.yml -f docker-compose.local.yml down",
     "local:disk": "docker system df",
     "local:clean-cache": "node scripts/clean-local-cache.mjs",
+    "local:clean-cache:all": "node scripts/clean-local-cache.mjs --all",
     "test:tunnel": "node scripts/cloudflare-tunnel.mjs",
     "test:tunnel:check": "node scripts/cloudflare-tunnel.mjs --check",
     "test:remote": "node scripts/verify-remote.mjs"

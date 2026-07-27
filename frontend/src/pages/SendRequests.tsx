@@ -15,10 +15,8 @@ interface ProviderStatus {
   local?: boolean;
 }
 
-interface WorkflowNotificationUser {
-  bitrixUserId: number;
-  active: boolean;
-  receiveNotifications: boolean;
+interface WorkflowNotificationDefaults {
+  bitrixUserIds: number[];
 }
 
 type Step = 1 | 2 | 3;
@@ -53,16 +51,14 @@ export function SendRequests() {
     retry: false
   });
   const workflowQuery = useQuery({
-    queryKey: ['term-workflow'],
-    queryFn: async () => (await api.get<WorkflowNotificationUser[]>('/term-workflow')).data,
+    queryKey: ['term-workflow-notification-defaults'],
+    queryFn: async () => (await api.get<WorkflowNotificationDefaults>('/term-workflow/notification-defaults')).data,
     retry: false
   });
   useEffect(() => {
     if (!workflowQuery.data || notificationDefaultsApplied.current) return;
     notificationDefaultsApplied.current = true;
-    setNotificationIds(workflowQuery.data
-      .filter((item) => item.active && item.receiveNotifications)
-      .map((item) => String(item.bitrixUserId)));
+    setNotificationIds(workflowQuery.data.bitrixUserIds.map(String));
   }, [workflowQuery.data]);
 
   const prepare = useMutation({
@@ -100,14 +96,12 @@ export function SendRequests() {
       setDepartment('');
       setCpf('');
       setEquipment([emptyEquipment()]);
-      setNotificationIds((workflowQuery.data || [])
-        .filter((item) => item.active && item.receiveNotifications)
-        .map((item) => String(item.bitrixUserId)));
+      setNotificationIds((workflowQuery.data?.bitrixUserIds || []).map(String));
       setNotificationSearch('');
       setStep(1);
       setSentMessage(providerQuery.data?.local
         ? 'Envio local simulado. Nenhum e-mail foi enviado; abra a experiência do colaborador abaixo.'
-        : 'Termo criado no Bitrix24. O representante da empresa assina primeiro; depois o Bitrix24 libera a assinatura ao colaborador.');
+        : 'Termo enviado pelo chat do Bitrix24. O colaborador já pode revisar e assinar diretamente no FortaDocs.');
       setLocalSigningUrl(
         providerQuery.data?.local && localToken
           ? `/assinar/${encodeURIComponent(localToken)}`
@@ -258,12 +252,12 @@ function ProviderNotice({ provider, ready }: { provider?: ProviderStatus; ready:
   if (!provider?.local && ready) return <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900"><strong>Assinatura no FortaDocs.</strong> O colaborador recebe no chat um link pessoal que abre a assinatura dentro do Bitrix24.</div>;
   if (provider?.local) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Modo local: envio e assinatura simulados; nenhum e-mail real será enviado.</div>;
   if (!ready) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><strong>Envio indisponível.</strong> {providerSetupMessage(provider)} A prévia do PDF continua disponível.</div>;
-  return <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900"><strong>Assinatura pelo Bitrix24.</strong> Ao enviar, o representante confirma primeiro no Bitrix24; em seguida o colaborador recebe a solicitação.</div>;
+  return <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900"><strong>Assinatura dentro do Bitrix24.</strong> O colaborador assina; operadores e notificados apenas acompanham o processo.</div>;
 }
 
 function providerSetupMessage(provider?: ProviderStatus) {
   if (!provider?.reason) return 'Confirme os escopos im e placement do aplicativo Bitrix24.';
-  return provider?.reason || 'Selecione o representante da empresa em Configurações.';
+  return provider.reason;
 }
 
 function StepButton({ number, label, current, available, onClick }: { number: Step; label: string; current: Step; available: boolean; onClick: () => void }) {

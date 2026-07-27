@@ -1,4 +1,4 @@
-# Diagrama do fluxo de assinatura
+# Fluxo de assinatura interna
 
 ## Fluxo principal
 
@@ -8,130 +8,162 @@ sequenceDiagram
     actor Operador
     participant Web as FortaDocs Admin
     participant API as API FortaDocs
-    participant DB as PostgreSQL / Supabase
+    participant Directory as Diretório Bitrix24
+    participant DB as PostgreSQL
     participant Storage as Storage privado
-    participant Drive as Drive Bitrix24
     participant Chat as Chat Bitrix24
     actor Colaborador
     participant Sign as Tela de assinatura
+    participant Drive as Drive Bitrix24
+    actor Notificados
 
-    Operador->>Web: Seleciona colaborador, equipamentos e notificados
-    Web->>API: Cria rascunho e solicita previa
+    Operador->>Web: Seleciona colaborador pelo ID, equipamentos e notificados
+    Web->>API: Cria ou atualiza rascunho
+    API->>Directory: Consulta perfil e departamento pelo ID
+    Directory-->>API: Dados atuais do colaborador
+    API->>API: Valida e normaliza CPF
+    Operador->>Web: Solicita prévia
+    Web->>API: POST /send-requests/:id/preview
     API->>Storage: Grava PDF sem assinatura
     Storage-->>API: Caminho privado e SHA-256
-    API-->>Web: URL temporaria da previa
+    API-->>Web: URL temporária da prévia
     Operador->>Web: Confirma envio
     Web->>API: POST /send-requests/:id/send
     API->>DB: Cria assinatura FORTADOCS e convite
-    Note over API,DB: Token aleatorio; banco recebe somente o hash
+    Note over API,DB: Token aleatório; banco recebe somente o hash
     API->>Chat: im.message.add com link REST_APP_URI
     Chat-->>Colaborador: Mensagem pessoal
     API->>Chat: im.notify.personal.add
-    Chat-->>Colaborador: Alerta clicavel
-    API->>DB: Registra mensagem, status SENT e evento
-    API-->>Web: Envio concluido
-    Note over Web,Colaborador: Se operador = colaborador, o Web exibe Abrir minha assinatura
+    Chat-->>Colaborador: Alerta clicável
+    API->>DB: Registra evento e estado SENT
+    API-->>Web: Termo Enviado
 
-    Colaborador->>Chat: Clica em Abrir e assinar
-    Chat->>API: POST launch + OAuth + PLACEMENT_OPTIONS
-    API->>Chat: user.current
-    Chat-->>API: ID do usuario conectado
-    API->>DB: Confere token, prazo, usuario e documento
+    Colaborador->>Chat: Clica em Revisar e assinar
+    Chat->>API: OAuth + PLACEMENT_OPTIONS
+    API->>Directory: user.current
+    Directory-->>API: ID do usuário conectado
+    API->>DB: Confere token, prazo, usuário e documento
     API->>DB: Marca VIEWED na primeira abertura autenticada
-    API-->>Sign: Codigo de abertura de uso unico
-    Sign->>API: Troca codigo por sessao SIGN_DOCUMENT
-    API-->>Sign: PDF temporario e dados minimos
+    API-->>Sign: Código de abertura de uso único
+    Sign->>API: Troca código por sessão SIGN_DOCUMENT
+    API-->>Sign: PDF temporário e dados mínimos
     Colaborador->>Sign: Digita, desenha ou importa imagem
     Colaborador->>Sign: Confirma leitura e finaliza
-    Sign->>API: PNG normalizado + metodo + concordancia
-    API->>Storage: Le PDF original
-    API->>API: Incorpora assinatura e calcula hashes
-    API->>Storage: Grava PDF assinado
-    API->>DB: Conclui convite e marca SIGNED
-    API->>Chat: Notifica todas as pessoas selecionadas
-    API->>Chat: Notifica automaticamente quem criou o termo
-    API->>Drive: Salva PDF em /Termo de Responsabilidade
-    Drive-->>API: ID do arquivo e da pasta
-    API->>DB: Marca FINISHED / COMPLETED
-    API-->>Sign: Confirmacao e link temporario do PDF final
+    Sign->>API: PNG normalizado + método + concordância
+    API->>Storage: Lê PDF original e grava o assinado
+    API->>DB: Salva hashes, encerra convite e marca SIGNED
+    API->>Chat: Notifica destinatários configurados
+    Chat-->>Notificados: Termo assinado
+    API->>Drive: Salva PDF na pasta configurada
+    alt Arquivamento confirmado
+        Drive-->>API: IDs do arquivo e da pasta
+        API->>DB: Marca FINISHED / COMPLETED / ARCHIVED
+        API-->>Sign: Confirma Concluído e libera PDF final
+    else Falha no Drive
+        API->>DB: Mantém SIGNED e marca archive_status=FAILED
+        API-->>Web: Operador pode tentar arquivar novamente
+    end
 ```
 
-## Separacao de acesso
+Somente o colaborador associado ao termo assina. Operadores, administradores e destinatários de
+notificações não acrescentam assinatura ao PDF.
+
+## Separação de acesso
 
 ```mermaid
 flowchart LR
     A[Link normal do aplicativo] --> B[OAuth Bitrix24]
-    B --> C{Usuario ativo do FortaDocs?}
-    C -- Sim --> D[Sessao administrativa]
-    D --> E[Dashboard]
-    D --> F[Novo termo]
-    D --> G[Termos e configuracoes]
-    C -- Nao --> H[Acesso negado]
+    B --> C{Usuário ativo do FortaDocs?}
+    C -- Sim --> D[Sessão administrativa]
+    D --> E{Pode operar?}
+    E -- Sim --> F[Dashboard, Novo termo e Termos]
+    E -- Não --> G[Consulta permitida pelo perfil]
+    C -- Não --> H[Acesso negado]
 
     I[Link pessoal do chat] --> J[REST_APP_URI]
     J --> K{Token + ID Bitrix conferem?}
-    K -- Sim --> L[Sessao SIGN_DOCUMENT]
+    K -- Sim --> L[Sessão SIGN_DOCUMENT]
     L --> M[Somente tela de assinatura]
-    K -- Nao --> N[Convite indisponivel]
+    K -- Não --> N[Convite indisponível]
 
-    L -. bloqueado .-> E
-    L -. bloqueado .-> F
-    L -. bloqueado .-> G
+    L -. bloqueado .-> D
 ```
 
-## Estados do documento
+## Máquina de estados
 
 ```mermaid
 stateDiagram-v2
     [*] --> DRAFT
-    DRAFT --> READY: previa gerada
+    DRAFT --> READY: prévia gerada
     READY --> SENDING: operador confirma
-    SENDING --> SENT: mensagem enviada ao chat
-    SENT --> VIEWED: colaborador abre no Bitrix24
-    VIEWED --> SIGNED: assinatura incorporada ao PDF
-    SIGNED --> FINISHED: PDF confirmado no Drive
-    SIGNED --> SIGNED: falha no Drive; permite nova tentativa
-    SENDING --> FAILED: falha de API ou permissao
-    READY --> DRAFT: documento alterado
-    FINISHED --> [*]: concluido
+    SENDING --> SENT: chat aceita a mensagem
+    SENT --> VIEWED: colaborador abre e é autenticado
+    VIEWED --> SIGNED: assinatura incorporada e hashes salvos
+    SIGNED --> FINISHED: Drive confirma o PDF
+    SIGNED --> SIGNED: falha no Drive e nova tentativa
+    SENDING --> FAILED: falha de envio ou permissão
+    SENT --> CANCELED: convite revogado por remoção
+    SENT --> DECLINED: retorno de provedor legado
+    READY --> DRAFT: conteúdo alterado
+    FINISHED --> [*]: concluído
 ```
 
-## Significado operacional dos status
+## Status mostrados ao usuário
 
-| Status exibido | Condicao registrada |
+| Status exibido | Estado técnico e condição |
 |---|---|
-| Enviado | A mensagem do convite foi aceita pelo chat do Bitrix24 |
-| Visualizado | O colaborador abriu o convite dentro do Bitrix24 e teve sua identidade confirmada |
-| Assinado | A assinatura foi incorporada ao PDF, o SHA-256 foi salvo e o convite foi encerrado |
-| Concluido | O Bitrix24 confirmou o PDF na pasta `Termo de Responsabilidade` do Drive do usuario `8465` |
+| **Enviado** | `SENT`: o chat do Bitrix24 aceitou a mensagem com o convite |
+| **Visualizado** | `VIEWED`: o colaborador abriu o convite e teve a identidade confirmada |
+| **Assinado** | `SIGNED`: a assinatura foi incorporada, o SHA-256 foi salvo e o convite encerrado |
+| **Concluído** | `FINISHED` + `COMPLETED` + `ARCHIVED`: o Drive confirmou o PDF na pasta configurada |
 
-Falhas de envio usam `FAILED`. Recusa usa `DECLINED`, cancelamento ou expiracao usa `CANCELED`
-e falha de processamento usa `ERROR`. Uma falha exclusiva do Drive nao desfaz a assinatura:
-o termo continua `SIGNED`, recebe `archive_status=FAILED` e pode ser arquivado novamente pelo
-painel administrativo.
+Falha de envio usa `FAILED`; `DECLINED` pertence aos provedores legados; cancelamento por remoção
+usa `CANCELED`; e falha de processamento da assinatura usa `ERROR`. Um convite expirado tem o
+acesso bloqueado por `expires_at`, mas ainda precisa de um job de reconciliação para alterar
+automaticamente o estado agregado. Uma falha exclusiva do Drive não desfaz a
+assinatura: o termo continua `SIGNED`, recebe `archive_status=FAILED` e pode ser arquivado
+novamente por um operador.
 
-## Controles de seguranca
+## Controles de segurança
 
 - convite com 256 bits de entropia e validade de sete dias;
 - token persistido somente como SHA-256;
-- codigo de abertura de uso unico e validade de dois minutos;
-- sessao do signatario limitada a uma hora e a endpoints exclusivos;
-- validacao do ID atual por `user.current`;
-- RLS nas tabelas novas e nenhum privilegio para `anon` ou `authenticated`;
-- bucket privado e URLs temporarias;
-- limite de 1 MB e validacao de assinatura PNG;
-- operacao de conclusao atomica para impedir assinatura dupla;
-- convite concluido nao volta a aceitar assinatura e informa que nao existe acao pendente;
-- assinatura posicionada pela linha real do PDF, sem coordenada fixa de pagina;
-- imagem recortada no navegador e limitada ao espaco entre a data e a linha;
-- SHA-256 do desenho e do PDF final na trilha de auditoria.
+- código de abertura de uso único e validade de dois minutos;
+- sessão do signatário limitada a uma hora e a endpoints exclusivos;
+- validação do ID atual por `user.current`;
+- perfil do colaborador reconsultado no backend, sem confiar em nome/e-mail enviados pela tela;
+- CPF com validação de dígitos, normalização e ausência em logs;
+- RLS em todas as 18 tabelas `app_*` e nenhum DML para `anon` ou `authenticated`;
+- bucket privado e URLs temporárias;
+- imagem limitada a 1 MB, PNG validado, até 4096×2048 e quatro milhões de pixels;
+- operação de conclusão atômica para impedir assinatura dupla;
+- convite concluído não aceita outra assinatura;
+- assinatura posicionada pela linha real do PDF, sem coordenada fixa;
+- SHA-256 da imagem e do PDF final na trilha de auditoria.
 
-## Remocao do historico
+## Remoção do histórico
 
-O `X` da tela Termos faz uma remocao logica e auditada:
+A tela **Termos** substitui ações destrutivas individuais por caixas de seleção, seleção de todos
+os itens removíveis carregados e uma confirmação em lote. A operação:
 
-- rascunhos somem da visao operacional;
-- convites pendentes sao revogados e a assinatura passa para cancelada;
-- PDFs ja assinados, hashes e eventos continuam preservados;
-- dashboard e lista ignoram itens removidos;
-- a auditoria registra usuario, horario, estado anterior e cancelamento do convite.
+- aceita no máximo 100 IDs, remove duplicados e usa uma transação serializável;
+- faz remoção lógica por `removed_at`/`removed_by_user_id`;
+- revoga convites pendentes somente se ainda não tiverem sido assinados;
+- preserva PDFs, hashes, eventos e auditoria;
+- ignora itens ausentes ou já removidos, permitindo repetição segura;
+- bloqueia qualquer `SIGNED` cujo arquivamento no Drive esteja `PENDING` ou `FAILED`;
+- registra um `batchId` comum para a auditoria de todos os itens.
+
+O endpoint `DELETE /send-requests/:id` permanece apenas para compatibilidade e delega à mesma
+regra segura.
+
+## Limites operacionais atuais
+
+- histórico com cursor e páginas de 10 a 100 registros;
+- cache de usuários/departamentos Bitrix24 por 60 segundos;
+- timeout HTTP Bitrix24 de 15 segundos;
+- sincronização limitada a 100 assinaturas por execução e concorrência cinco;
+- fila local de conversão PDF, por padrão com uma conversão ativa e até 20 aguardando.
+
+Para múltiplas réplicas, essas filas e locks em memória deverão migrar para um mecanismo
+distribuído.

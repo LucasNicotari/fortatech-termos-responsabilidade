@@ -1,9 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { TermOperatorGuard } from '../common/term-operator.guard';
+import { BulkRemoveSendRequestsDto } from './dto/bulk-remove-send-requests.dto';
 import { CreateSendRequestDto, UpdateSendRequestDto } from './dto/create-send-request.dto';
+import { ListSendRequestsDto } from './dto/list-send-requests.dto';
 import { SendRequestsService } from './send-requests.service';
 
 @ApiTags('send-requests')
@@ -12,6 +14,11 @@ import { SendRequestsService } from './send-requests.service';
 @Controller('send-requests')
 export class SendRequestsController {
   constructor(private readonly sendRequests: SendRequestsService) {}
+
+  @Get('page')
+  findPage(@Query() query: ListSendRequestsDto) {
+    return this.sendRequests.findPage(query);
+  }
 
   @Get()
   findAll() {
@@ -52,6 +59,15 @@ export class SendRequestsController {
   @UseGuards(TermOperatorGuard)
   retry(@Param('id') id: string) {
     return this.sendRequests.retry(id);
+  }
+
+  @Post('bulk-remove')
+  @UseGuards(TermOperatorGuard)
+  bulkRemoveFromHistory(
+    @Body() dto: BulkRemoveSendRequestsDto,
+    @CurrentUser() user?: { id: string }
+  ) {
+    return this.sendRequests.bulkRemoveFromHistory(dto.ids, user?.id);
   }
 
   @Delete(':id')

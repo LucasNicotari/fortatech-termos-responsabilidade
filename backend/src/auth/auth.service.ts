@@ -4,13 +4,15 @@ import { UserRole } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkflowService } from '../workflow/workflow.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly workflow: WorkflowService
   ) {}
 
   async localLogin() {
@@ -88,6 +90,7 @@ export class AuthService {
   }
 
   private async session(user: { id: string; name: string; email: string; role: UserRole; bitrixUserId: string | null }) {
+    const canOperate = await this.workflow.canOperate(user.bitrixUserId || undefined);
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, email: user.email, role: user.role, bitrixUserId: user.bitrixUserId },
       { expiresIn: 60 * 60 }
@@ -96,7 +99,14 @@ export class AuthService {
     return {
       accessToken,
       accessMode: 'ADMIN',
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, bitrixUserId: user.bitrixUserId }
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        bitrixUserId: user.bitrixUserId,
+        canOperate
+      }
     };
   }
 }

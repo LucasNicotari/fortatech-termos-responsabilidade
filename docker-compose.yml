@@ -1,14 +1,21 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: fortatech-termos-postgres
     restart: unless-stopped
+    pids_limit: 200
+    logging: *default-logging
     environment:
       POSTGRES_DB: fortatech_termos
       POSTGRES_USER: fortatech
       POSTGRES_PASSWORD: fortatech
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,8 +28,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: fortatech-termos-backend
     restart: unless-stopped
+    pids_limit: 256
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,12 +50,15 @@ services:
       LOCAL_STORAGE_SIGNING_KEY: ${LOCAL_STORAGE_SIGNING_KEY:-}
       RESPONSIBILITY_TEMPLATE_PATH: /templates/term.docx
       LIBREOFFICE_BIN: libreoffice
+      PDF_CONVERSION_CONCURRENCY: ${PDF_CONVERSION_CONCURRENCY:-1}
+      PDF_CONVERSION_QUEUE_LIMIT: ${PDF_CONVERSION_QUEUE_LIMIT:-20}
+      PDF_CONVERSION_QUEUE_TIMEOUT_MS: ${PDF_CONVERSION_QUEUE_TIMEOUT_MS:-30000}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       BACKEND_PORT: ${BACKEND_PORT:-3000}
       LOCAL_DEVELOPMENT_MODE: ${LOCAL_DEVELOPMENT_MODE:-false}
     ports:
-      - "${BACKEND_PORT:-3000}:3000"
+      - "127.0.0.1:${BACKEND_PORT:-3000}:3000"
     volumes:
       - type: bind
         source: ${RESPONSIBILITY_TEMPLATE_HOST_PATH:-./templates/term.docx}
@@ -60,12 +71,13 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
         VITE_LOCAL_DEVELOPMENT_MODE: ${VITE_LOCAL_DEVELOPMENT_MODE:-false}
-    container_name: fortatech-termos-frontend
     restart: unless-stopped
+    pids_limit: 100
+    logging: *default-logging
     depends_on:
       - backend
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
 
 volumes:
   postgres_data:
