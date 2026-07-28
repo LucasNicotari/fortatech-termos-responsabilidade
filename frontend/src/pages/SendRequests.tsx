@@ -263,7 +263,7 @@ function providerSetupMessage(provider?: ProviderStatus) {
 function StepButton({ number, label, current, available, onClick }: { number: Step; label: string; current: Step; available: boolean; onClick: () => void }) {
   const active = number === current;
   const complete = number < current;
-  return <button type="button" disabled={!available} onClick={onClick} aria-current={active ? 'step' : undefined} className={`focus-ring flex min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-3 text-xs font-semibold transition sm:text-sm ${active ? 'border-b24-blue bg-surface text-b24-blue-dark' : 'border-transparent text-steel hover:bg-surface/70'} disabled:cursor-not-allowed disabled:opacity-45`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${active || complete ? 'bg-b24-blue text-white' : 'bg-zinc-200 text-steel'}`}>{complete ? <Check size={12} /> : number}</span><span className="truncate">{label}</span></button>;
+  return <button type="button" disabled={!available} onClick={onClick} aria-current={active ? 'step' : undefined} className={`focus-ring flex min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-3 text-xs font-semibold transition sm:text-sm ${active ? 'border-b24-blue bg-surface text-b24-blue-dark' : 'border-transparent text-steel hover:bg-surface/70'} disabled:cursor-not-allowed disabled:opacity-60`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${active || complete ? 'bg-b24-blue text-white' : 'bg-zinc-200 text-steel'}`}>{complete ? <Check size={12} /> : number}</span><span className="truncate">{label}</span></button>;
 }
 
 function SectionTitle({ icon: Icon, title, description }: { icon: typeof UserRound; title: string; description: string }) {
@@ -279,7 +279,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
 }
 
 function NextButton({ children, disabled, onClick }: { children: React.ReactNode; disabled: boolean; onClick: () => void }) {
-  return <button type="button" disabled={disabled} onClick={onClick} className="focus-ring inline-flex items-center gap-1 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-45">{children} <ChevronRight size={16} /></button>;
+  return <button type="button" disabled={disabled} onClick={onClick} className="focus-ring inline-flex items-center gap-1 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:cursor-not-allowed disabled:opacity-60">{children} <ChevronRight size={16} /></button>;
 }
 
 function SummaryCard({ title, lines, onEdit }: { title: string; lines: string[]; onEdit: () => void }) {

@@ -12,11 +12,11 @@
 }
 
 :root.dark {
-  --color-bg: 20 28 36;
-  --color-surface: 29 39 49;
-  --color-border: 55 69 82;
+  --color-bg: 17 25 33;
+  --color-surface: 27 38 48;
+  --color-border: 57 72 86;
   --color-ink: 234 240 245;
-  --color-steel: 174 187 199;
+  --color-steel: 180 193 205;
   --color-blue-dark: 71 199 238;
 }
 
@@ -25,15 +25,30 @@
 }
 
 html {
+  min-height: 100%;
   background: rgb(var(--color-bg));
 }
 
 body {
+  min-height: 100%;
   margin: 0;
   background: rgb(var(--color-bg));
   color: rgb(var(--color-steel));
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: hidden;
   transition: background-color 160ms ease, color 160ms ease;
+}
+
+#root {
+  min-height: 100vh;
+  background: rgb(var(--color-bg));
+}
+
+html.bitrix-embedded,
+html.bitrix-embedded body,
+html.bitrix-embedded #root {
+  border: 0;
+  border-radius: 0;
 }
 
 button,
@@ -41,6 +56,59 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  border-color: rgb(var(--color-border));
+  background-color: rgb(var(--color-surface));
+  color: rgb(var(--color-ink));
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):hover,
+select:hover,
+textarea:hover {
+  border-color: rgb(var(--color-blue-dark) / 0.65);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgb(var(--color-steel) / 0.7);
+  opacity: 1;
+}
+
+:root.dark input:read-only,
+:root.dark textarea:read-only,
+:root.dark input:disabled,
+:root.dark select:disabled,
+:root.dark textarea:disabled {
+  border-color: rgb(var(--color-border));
+  background-color: rgb(38 50 61) !important;
+  color: rgb(var(--color-steel)) !important;
+  opacity: 1;
+}
+
+:root.dark input:-webkit-autofill,
+:root.dark input:-webkit-autofill:hover,
+:root.dark input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--color-ink));
+  box-shadow: 0 0 0 1000px rgb(var(--color-surface)) inset;
+  caret-color: rgb(var(--color-ink));
+}
+
+::selection {
+  background: rgb(47 198 246 / 0.3);
+  color: rgb(var(--color-ink));
 }
 
 .focus-ring {
@@ -67,6 +135,10 @@ textarea {
 
 .dark .bg-sky-50\/60 {
   background-color: rgb(12 74 110 / 0.3);
+}
+
+.dark .bg-sky-100 {
+  background-color: rgb(12 74 110 / 0.45);
 }
 
 .dark .from-sky-50 {
@@ -135,16 +207,73 @@ textarea {
   color: rgb(252 165 165);
 }
 
+.dark .text-sky-800,
+.dark .text-sky-900 {
+  color: rgb(186 230 253);
+}
+
+.dark .text-zinc-300 {
+  color: rgb(156 163 175);
+}
+
+.dark .text-zinc-400,
+.dark .text-zinc-500,
+.dark .text-zinc-700 {
+  color: rgb(180 193 205);
+}
+
 .dark .border-zinc-200,
 .dark .border-zinc-300,
 .dark .divide-zinc-200 > :not([hidden]) ~ :not([hidden]) {
   border-color: rgb(var(--color-border));
 }
 
+.dark .border-sky-200 {
+  border-color: rgb(56 189 248 / 0.38);
+}
+
+.dark .border-amber-200 {
+  border-color: rgb(251 191 36 / 0.32);
+}
+
+.dark .border-emerald-200 {
+  border-color: rgb(52 211 153 / 0.3);
+}
+
+.dark .border-red-200 {
+  border-color: rgb(248 113 113 / 0.32);
+}
+
 .dark input,
 .dark select,
 .dark textarea {
   color-scheme: dark;
+}
+
+* {
+  scrollbar-color: rgb(var(--color-steel) / 0.55) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgb(var(--color-steel) / 0.48);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-steel) / 0.72);
+  background-clip: padding-box;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -14,6 +14,7 @@ export function BitrixFrameSync() {
   useEffect(() => {
     if (window.self === window.top || !window.BX24) return;
 
+    document.documentElement.classList.add('bitrix-embedded');
     let observer: ResizeObserver | undefined;
     let resizeTimer: number | undefined;
 
@@ -33,6 +34,7 @@ export function BitrixFrameSync() {
     return () => {
       observer?.disconnect();
       window.clearTimeout(resizeTimer);
+      document.documentElement.classList.remove('bitrix-embedded');
     };
   }, []);
 

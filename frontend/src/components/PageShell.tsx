@@ -71,9 +71,9 @@ export function PageShell() {
     : primaryItems.filter((item) => item.to !== '/send-requests');
 
   return (
-    <div className="min-h-screen bg-b24-bg">
+    <div className="min-h-screen overflow-x-hidden bg-b24-bg">
       <BitrixFrameSync />
-      <header className="sticky top-0 z-30 border-t-[3px] border-t-b24-blue bg-surface shadow-[0_2px_10px_rgba(82,92,105,0.08)]">
+      <header className="sticky top-0 z-30 border-t-[3px] border-t-b24-blue bg-surface/95 shadow-[0_2px_14px_rgba(23,34,45,0.08)] backdrop-blur-md">
         <div className="mx-auto max-w-[1600px] px-3 sm:px-5 lg:px-7">
           <div className="flex min-h-[58px] items-center gap-3 lg:gap-5">
             <Link to="/" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FortaDocs - Dashboard">
@@ -97,7 +97,7 @@ export function PageShell() {
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="focus-ring mr-1 inline-grid h-9 w-9 place-items-center rounded-lg border border-transparent text-steel transition hover:border-b24-border hover:bg-b24-bg hover:text-ink"
+                className="focus-ring mr-1 inline-grid h-9 w-9 place-items-center rounded-full border border-transparent bg-b24-bg/60 text-steel transition hover:bg-b24-bg hover:text-b24-blue-dark"
                 aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
                 title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
               >
