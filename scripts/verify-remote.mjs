@@ -34,8 +34,10 @@ async function main() {
   const frontendResponse = await fetchWithTimeout(frontend, {}, 30_000);
   assert(frontendResponse.ok, `Frontend retornou HTTP ${frontendResponse.status}`);
   const csp = frontendResponse.headers.get('content-security-policy') || '';
-  assert(csp.includes(`frame-ancestors ${portal}`), 'CSP nao restringe o iframe ao portal Forta Tech');
-  assert(!csp.includes('*.bitrix24'), 'CSP ainda contem wildcard Bitrix24');
+  const frameAncestors = csp.split(';').map((directive) => directive.trim())
+    .find((directive) => directive.startsWith('frame-ancestors ')) || '';
+  assert(frameAncestors.includes(portal), 'CSP nao restringe o iframe ao portal Forta Tech');
+  assert(!frameAncestors.includes('*'), 'frame-ancestors ainda contem wildcard Bitrix24');
 
   const html = await frontendResponse.text();
   const assetPath = html.match(/<script[^>]+type="module"[^>]+src="([^"]+\.js)"/)?.[1]
