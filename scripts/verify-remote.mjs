@@ -38,7 +38,8 @@ async function main() {
   assert(!csp.includes('*.bitrix24'), 'CSP ainda contem wildcard Bitrix24');
 
   const html = await frontendResponse.text();
-  const assetPath = html.match(/<script[^>]+src="([^"]+\.js)"/)?.[1];
+  const assetPath = html.match(/<script[^>]+type="module"[^>]+src="([^"]+\.js)"/)?.[1]
+    || html.match(/<script[^>]+src="([^"]+\.js)"[^>]+type="module"/)?.[1];
   assert(assetPath, 'Bundle JavaScript nao encontrado no HTML');
   const asset = await (await fetchWithTimeout(new URL(assetPath, frontend).toString(), {}, 30_000)).text();
   assert(asset.includes(backend), 'Frontend nao foi compilado com a URL do backend HML');
