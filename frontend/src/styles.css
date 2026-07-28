@@ -2,15 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-bg: 238 242 244;
+  --color-surface: 255 255 255;
+  --color-border: 223 227 232;
+  --color-ink: 49 58 68;
+  --color-steel: 82 92 105;
+  --color-blue-dark: 25 169 213;
+}
+
+:root.dark {
+  --color-bg: 20 28 36;
+  --color-surface: 29 39 49;
+  --color-border: 55 69 82;
+  --color-ink: 234 240 245;
+  --color-steel: 174 187 199;
+  --color-blue-dark: 71 199 238;
+}
+
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: rgb(var(--color-bg));
+}
+
 body {
   margin: 0;
-  background: #eef2f4;
-  color: #525c69;
+  background: rgb(var(--color-bg));
+  color: rgb(var(--color-steel));
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
 button,
@@ -22,4 +45,115 @@ textarea {
 
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-b24-blue focus:ring-offset-2;
+}
+
+.dark .focus-ring {
+  @apply focus:ring-offset-[#141c24];
+}
+
+/* Tonal utility adjustments keep alerts and interactive states readable in dark mode. */
+.dark .bg-sky-50,
+.dark .hover\:bg-sky-50:hover {
+  background-color: rgb(12 74 110 / 0.34);
+}
+
+.dark .bg-sky-50\/30 {
+  background-color: rgb(12 74 110 / 0.18);
+}
+
+.dark .bg-sky-50\/40 {
+  background-color: rgb(12 74 110 / 0.24);
+}
+
+.dark .bg-sky-50\/60 {
+  background-color: rgb(12 74 110 / 0.3);
+}
+
+.dark .from-sky-50 {
+  --tw-gradient-from: rgb(12 74 110 / 0.34) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(12 74 110 / 0) var(--tw-gradient-to-position);
+}
+
+.dark .bg-zinc-50,
+.dark .hover\:bg-zinc-50:hover,
+.dark .bg-zinc-100,
+.dark .disabled\:bg-zinc-100:disabled {
+  background-color: rgb(55 65 75 / 0.55);
+}
+
+.dark .bg-zinc-200 {
+  background-color: rgb(75 85 99 / 0.7);
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-100 {
+  background-color: rgb(120 53 15 / 0.36);
+}
+
+.dark .bg-blue-50,
+.dark .bg-blue-100 {
+  background-color: rgb(30 64 175 / 0.3);
+}
+
+.dark .bg-emerald-50,
+.dark .bg-emerald-100,
+.dark .hover\:bg-emerald-50:hover {
+  background-color: rgb(6 95 70 / 0.3);
+}
+
+.dark .bg-indigo-100 {
+  background-color: rgb(55 48 163 / 0.32);
+}
+
+.dark .bg-red-50,
+.dark .hover\:bg-red-50:hover {
+  background-color: rgb(127 29 29 / 0.28);
+}
+
+.dark .text-amber-600,
+.dark .text-amber-800,
+.dark .text-amber-900 {
+  color: rgb(252 211 77);
+}
+
+.dark .text-blue-600,
+.dark .text-blue-800 {
+  color: rgb(147 197 253);
+}
+
+.dark .text-emerald-600,
+.dark .text-emerald-700,
+.dark .text-emerald-800 {
+  color: rgb(110 231 183);
+}
+
+.dark .text-indigo-800 {
+  color: rgb(199 210 254);
+}
+
+.dark .text-red-700 {
+  color: rgb(252 165 165);
+}
+
+.dark .border-zinc-200,
+.dark .border-zinc-300,
+.dark .divide-zinc-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(var(--color-border));
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

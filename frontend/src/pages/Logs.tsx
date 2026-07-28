@@ -18,7 +18,7 @@ export function Logs({ embedded = false }: { embedded?: boolean }) {
     <section>
       {!embedded && <div className="mb-5"><h1 className="text-2xl font-bold text-ink">Atividades</h1><p className="mt-1 text-sm text-steel">Histórico simples das ações realizadas no aplicativo.</p></div>}
 
-      <div className="overflow-hidden rounded border border-b24-border bg-white">
+      <div className="overflow-hidden rounded border border-b24-border bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-b24-border px-4 py-3.5 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-50 text-b24-blue-dark"><History size={17} /></span>
@@ -44,7 +44,7 @@ export function Logs({ embedded = false }: { embedded?: boolean }) {
         </div>
 
         {isLoading ? (
-          <div className="divide-y divide-b24-border/70">{Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-[66px] animate-pulse bg-white px-5 py-3"><div className="ml-11 h-4 w-1/3 rounded bg-zinc-200" /><div className="ml-11 mt-2 h-3 w-1/2 rounded bg-zinc-100" /></div>)}</div>
+          <div className="divide-y divide-b24-border/70">{Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-[66px] animate-pulse bg-surface px-5 py-3"><div className="ml-11 h-4 w-1/3 rounded bg-zinc-200" /><div className="ml-11 mt-2 h-3 w-1/2 rounded bg-zinc-100" /></div>)}</div>
         ) : isError ? (
           <div className="px-5 py-10 text-center"><AlertCircle className="mx-auto text-coral" size={24} /><p className="mt-2 text-sm text-ink">Não foi possível carregar as atividades.</p><button onClick={() => refetch()} className="mt-3 text-xs font-semibold text-b24-blue-dark hover:underline">Tentar novamente</button></div>
         ) : visible.length ? (

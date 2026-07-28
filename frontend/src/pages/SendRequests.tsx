@@ -167,7 +167,7 @@ export function SendRequests() {
         portalUrl={providerQuery.data?.portalUrl}
       />}
 
-      <div className="overflow-hidden rounded-xl border border-b24-border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-b24-border bg-surface shadow-sm">
         <div className="grid grid-cols-3 border-b border-b24-border bg-b24-bg/45">
           <StepButton number={1} label="Colaborador" current={step} available onClick={() => setStep(1)} />
           <StepButton number={2} label="Equipamentos" current={step} available={employeeComplete} onClick={() => setStep(2)} />
@@ -263,7 +263,7 @@ function providerSetupMessage(provider?: ProviderStatus) {
 function StepButton({ number, label, current, available, onClick }: { number: Step; label: string; current: Step; available: boolean; onClick: () => void }) {
   const active = number === current;
   const complete = number < current;
-  return <button type="button" disabled={!available} onClick={onClick} aria-current={active ? 'step' : undefined} className={`focus-ring flex min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-3 text-xs font-semibold transition sm:text-sm ${active ? 'border-b24-blue bg-white text-b24-blue-dark' : 'border-transparent text-steel hover:bg-white/70'} disabled:cursor-not-allowed disabled:opacity-45`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${active || complete ? 'bg-b24-blue text-white' : 'bg-zinc-200 text-steel'}`}>{complete ? <Check size={12} /> : number}</span><span className="truncate">{label}</span></button>;
+  return <button type="button" disabled={!available} onClick={onClick} aria-current={active ? 'step' : undefined} className={`focus-ring flex min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-3 text-xs font-semibold transition sm:text-sm ${active ? 'border-b24-blue bg-surface text-b24-blue-dark' : 'border-transparent text-steel hover:bg-surface/70'} disabled:cursor-not-allowed disabled:opacity-45`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${active || complete ? 'bg-b24-blue text-white' : 'bg-zinc-200 text-steel'}`}>{complete ? <Check size={12} /> : number}</span><span className="truncate">{label}</span></button>;
 }
 
 function SectionTitle({ icon: Icon, title, description }: { icon: typeof UserRound; title: string; description: string }) {
@@ -325,13 +325,13 @@ function EmployeePicker({ employees, value, onSelect }: {
           if (!open) setSearch('');
           setOpen((current) => !current);
         }}
-        className="focus-ring flex min-w-0 items-center justify-between gap-2 rounded border border-zinc-300 bg-white px-3 py-2 text-left text-ink"
+        className="focus-ring flex min-w-0 items-center justify-between gap-2 rounded border border-zinc-300 bg-surface px-3 py-2 text-left text-ink"
       >
         <span className={`truncate ${selectedName ? '' : 'text-zinc-400'}`}>{selectedName || 'Selecione um colaborador'}</span>
         <ChevronDown size={16} className={`shrink-0 text-steel transition ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border border-b24-border bg-white p-2 shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border border-b24-border bg-surface p-2 shadow-lg">
           <label className="flex h-8 items-center gap-2 rounded border border-zinc-300 px-2">
             <Search size={14} className="shrink-0 text-steel" />
             <input
@@ -405,13 +405,13 @@ function NotificationPicker({ employees, selectedIds, search, onSearch, onToggle
       </div>
       {!!selected.length && <div className="mt-3 flex flex-wrap gap-1.5">{selected.map((employee) => {
         const name = [employee.NAME, employee.LAST_NAME].filter(Boolean).join(' ');
-        return <span key={employee.ID} className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-white py-1 pl-2.5 pr-1.5 text-xs text-ink">{name}<button type="button" onClick={() => onRemove(employee.ID)} aria-label={`Remover ${name}`} className="rounded-full p-0.5 text-steel hover:bg-red-50 hover:text-coral"><X size={12} /></button></span>;
+        return <span key={employee.ID} className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-surface py-1 pl-2.5 pr-1.5 text-xs text-ink">{name}<button type="button" onClick={() => onRemove(employee.ID)} aria-label={`Remover ${name}`} className="rounded-full p-0.5 text-steel hover:bg-red-50 hover:text-coral"><X size={12} /></button></span>;
       })}</div>}
-      <label className="mt-3 flex items-center gap-2 rounded border border-b24-border bg-white px-3 py-2">
+      <label className="mt-3 flex items-center gap-2 rounded border border-b24-border bg-surface px-3 py-2">
         <Search size={15} className="text-steel" />
         <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Pesquisar qualquer usuario ativo do Bitrix24" className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none" />
       </label>
-      <div className="mt-2 max-h-36 overflow-y-auto rounded border border-b24-border bg-white">
+      <div className="mt-2 max-h-36 overflow-y-auto rounded border border-b24-border bg-surface">
         {visible.map((employee) => {
           const name = [employee.NAME, employee.LAST_NAME].filter(Boolean).join(' ') || `Usuario ${employee.ID}`;
           return <label key={employee.ID} className="flex cursor-pointer items-center gap-2 border-b border-b24-border/70 px-3 py-2 text-xs last:border-0 hover:bg-sky-50"><input type="checkbox" checked={selectedIds.includes(employee.ID)} onChange={() => onToggle(employee.ID)} className="h-4 w-4 accent-b24-blue" /><span className="min-w-0 flex-1"><strong className="block truncate font-medium text-ink">{name}</strong><span className="block truncate text-zinc-400">{employee.EMAIL || `ID ${employee.ID}`}</span></span></label>;

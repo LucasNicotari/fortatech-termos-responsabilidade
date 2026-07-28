@@ -188,7 +188,7 @@ export function SigningExperience({
 
   return (
     <main className="min-h-screen bg-b24-bg p-2 sm:p-4">
-      <div className="mx-auto max-w-6xl overflow-hidden rounded-xl border border-b24-border bg-white shadow-sm">
+      <div className="mx-auto max-w-6xl overflow-hidden rounded-xl border border-b24-border bg-surface shadow-sm">
         <header className="flex items-center gap-3 border-t-[3px] border-t-b24-blue px-4 py-3 sm:px-5">
           <FortaTechMark className="h-9 w-9" />
           <div className="min-w-0">
@@ -198,7 +198,7 @@ export function SigningExperience({
         </header>
         <div className="grid lg:grid-cols-[1.35fr_0.65fr]">
           <section className="border-y border-b24-border bg-zinc-100 p-2.5 lg:border-b-0 lg:border-r">
-            <iframe title={session.documentName} src={session.previewUrl} className="h-[56vh] min-h-[390px] w-full rounded border border-b24-border bg-white lg:h-[calc(100vh-105px)]" />
+            <iframe title={session.documentName} src={session.previewUrl} className="h-[56vh] min-h-[390px] w-full rounded border border-b24-border bg-surface lg:h-[calc(100vh-105px)]" />
           </section>
           <section className="p-4 sm:p-5">
             <h1 className="text-lg font-semibold text-ink">Olá, {session.employeeName}</h1>
@@ -222,7 +222,7 @@ export function SigningExperience({
               onPointerMove={move}
               onPointerUp={stop}
               onPointerCancel={stop}
-              className={`mt-4 h-36 w-full rounded-lg border-2 border-dashed border-b24-border bg-white ${method === 'DRAWN' ? 'touch-none cursor-crosshair' : ''}`}
+              className={`mt-4 h-36 w-full rounded-lg border-2 border-dashed border-b24-border bg-surface ${method === 'DRAWN' ? 'touch-none cursor-crosshair' : ''}`}
             />
             <button type="button" onClick={clear} className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-steel hover:text-ink"><Eraser size={15} /> Limpar</button>
 
@@ -300,9 +300,9 @@ function trimmedSignatureDataUrl(canvas: HTMLCanvasElement) {
 }
 
 function MethodButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof PenLine; label: string; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className={`focus-ring flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-semibold transition ${active ? 'bg-white text-b24-blue-dark shadow-sm' : 'text-steel hover:text-ink'}`}><Icon size={15} /> <span>{label}</span></button>;
+  return <button type="button" onClick={onClick} className={`focus-ring flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-semibold transition ${active ? 'bg-surface text-b24-blue-dark shadow-sm' : 'text-steel hover:text-ink'}`}><Icon size={15} /> <span>{label}</span></button>;
 }
 
 function CenteredMessage({ title, message, icon, action }: { title: string; message?: string; icon?: ReactNode; action?: ReactNode }) {
-  return <main className="grid min-h-screen place-items-center bg-b24-bg p-5"><div className="w-full max-w-md rounded-xl border border-b24-border bg-white p-8 text-center shadow-sm">{icon && <div className="mb-3 flex justify-center">{icon}</div>}<h1 className="text-xl font-semibold text-ink">{title}</h1>{message && <p className="mt-2 text-sm text-steel">{message}</p>}{action}</div></main>;
+  return <main className="grid min-h-screen place-items-center bg-b24-bg p-5"><div className="w-full max-w-md rounded-xl border border-b24-border bg-surface p-8 text-center shadow-sm">{icon && <div className="mb-3 flex justify-center">{icon}</div>}<h1 className="text-xl font-semibold text-ink">{title}</h1>{message && <p className="mt-2 text-sm text-steel">{message}</p>}{action}</div></main>;
 }

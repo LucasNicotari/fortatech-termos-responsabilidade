@@ -45,14 +45,14 @@ export function Settings() {
   return (
     <section className="mx-auto max-w-[1600px]">
       <header className="mb-5"><h1 className="text-2xl font-bold tracking-tight text-ink">Configurações</h1><p className="mt-1 text-sm text-steel">Centralize usuários, documentos e auditoria do FortaDocs.</p></header>
-      <nav className="mb-5 flex gap-1 overflow-x-auto rounded border border-b24-border bg-white p-1.5" aria-label="Seções das configurações">
+      <nav className="mb-5 flex gap-1 overflow-x-auto rounded border border-b24-border bg-surface p-1.5" aria-label="Seções das configurações">
         {settingsTabs.map((tab) => (
           <button key={tab.id} onClick={() => setSearchParams(tab.id === 'access' ? {} : { tab: tab.id })} aria-current={activeTab === tab.id ? 'page' : undefined} className={`focus-ring flex shrink-0 items-center gap-2 rounded px-3 py-2 text-sm font-medium transition ${activeTab === tab.id ? 'bg-sky-50 text-b24-blue-dark' : 'text-steel hover:bg-b24-bg hover:text-ink'}`}>
             <tab.icon size={16} /> {tab.label}
           </button>
         ))}
       </nav>
-      <Suspense fallback={<div className="h-64 animate-pulse rounded border border-b24-border bg-white" />}>
+      <Suspense fallback={<div className="h-64 animate-pulse rounded border border-b24-border bg-surface" />}>
         {activeTab === 'access' && <AccessSettings />}
         {activeTab === 'templates' && <TemplatesTab embedded />}
         {activeTab === 'activity' && <LogsTab embedded />}
@@ -117,7 +117,7 @@ function AccessSettings() {
 
   return (
     <div className="grid gap-4">
-      <section className="flex items-center gap-3 rounded border border-b24-border bg-white px-4 py-3.5 sm:px-5">
+      <section className="flex items-center gap-3 rounded border border-b24-border bg-surface px-4 py-3.5 sm:px-5">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600"><ShieldCheck size={17} /></span>
         <div className="min-w-0">
           <h2 className="font-semibold text-ink">Assinatura interna FortaDocs</h2>
@@ -125,7 +125,7 @@ function AccessSettings() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded border border-b24-border bg-white">
+      <section className="overflow-hidden rounded border border-b24-border bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-b24-border px-4 py-3.5 sm:px-5">
           <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-50 text-b24-blue-dark"><UserCheck size={17} /></span><div className="min-w-0"><h2 className="font-semibold text-ink">Usuários do Bitrix24</h2><p className="truncate text-xs text-steel">Controle acesso, perfil, operação e a seleção inicial de notificações.</p></div></div>
           <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-b24-border px-3 py-2 sm:max-w-80"><Search size={16} className="shrink-0 text-steel" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, cargo, setor ou ID" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label>
@@ -145,7 +145,7 @@ function AccessSettings() {
               <div key={item.bitrixUserId} className="grid gap-3 px-4 py-3 transition hover:bg-sky-50/40 lg:grid-cols-[minmax(200px,1fr)_110px_110px_115px_130px] lg:items-center lg:gap-2 lg:px-5">
                 <div className="flex min-w-0 items-center gap-3"><UserAvatar name={item.name} photoUrl={item.photoUrl} /><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{item.name}</p><p className="truncate text-xs text-steel">{item.workPosition || 'Cargo não informado'}{item.departmentName ? ` · ${item.departmentName}` : ''}</p><p className="truncate text-[11px] text-zinc-400">{item.email || 'Sem e-mail'} · ID {item.bitrixUserId}</p></div></div>
                 <CheckField label="Acessar o FortaDocs" checked={item.hasAccess} disabled={isCurrentUser} onChange={() => toggleAccess(item)} />
-                <label className="flex items-center justify-between gap-2 text-xs text-steel lg:justify-center"><span className="lg:hidden">Perfil e Setor</span><select value={item.role} disabled={!item.hasAccess || isCurrentUser} onChange={(event) => patchUser(item.bitrixUserId, { role: event.target.value as UserRole })} className="focus-ring w-24 rounded border border-b24-border bg-white px-2 py-1.5 text-xs text-ink disabled:bg-zinc-100 disabled:text-zinc-400"><option value="RH">RH</option><option value="TI">TI</option><option value="ADMIN">Admin</option></select></label>
+                <label className="flex items-center justify-between gap-2 text-xs text-steel lg:justify-center"><span className="lg:hidden">Perfil e Setor</span><select value={item.role} disabled={!item.hasAccess || isCurrentUser} onChange={(event) => patchUser(item.bitrixUserId, { role: event.target.value as UserRole })} className="focus-ring w-24 rounded border border-b24-border bg-surface px-2 py-1.5 text-xs text-ink disabled:bg-zinc-100 disabled:text-zinc-400"><option value="RH">RH</option><option value="TI">TI</option><option value="ADMIN">Admin</option></select></label>
                 <CheckField icon={<FilePenLine size={15} />} label="Gerenciar Termos" checked={item.canOperate} onChange={() => toggleOperate(item)} />
                 <CheckField icon={<Bell size={15} />} label="Notificações padrão" checked={item.receiveNotifications} onChange={() => patchUser(item.bitrixUserId, { receiveNotifications: !item.receiveNotifications })} />
               </div>

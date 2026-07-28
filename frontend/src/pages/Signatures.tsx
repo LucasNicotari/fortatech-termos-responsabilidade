@@ -190,7 +190,7 @@ export function Signatures() {
         </div>
         {canOperate && (
           <div className="flex items-center gap-2">
-            <button onClick={() => refresh.mutate(undefined)} disabled={refresh.isPending} className="focus-ring inline-flex h-9 items-center gap-2 rounded border border-b24-border bg-white px-3 text-sm font-medium text-steel hover:bg-sky-50 hover:text-b24-blue-dark disabled:opacity-60">
+            <button onClick={() => refresh.mutate(undefined)} disabled={refresh.isPending} className="focus-ring inline-flex h-9 items-center gap-2 rounded border border-b24-border bg-surface px-3 text-sm font-medium text-steel hover:bg-sky-50 hover:text-b24-blue-dark disabled:opacity-60">
               <RefreshCw size={16} className={refresh.isPending ? 'animate-spin' : ''} /> <span className="hidden sm:inline">Sincronizar</span>
             </button>
             <Link to="/send-requests" className="focus-ring inline-flex h-9 items-center gap-2 rounded bg-b24-blue px-3.5 text-sm font-semibold text-white hover:bg-b24-blue-dark"><FilePlus2 size={17} /> Novo termo</Link>
@@ -199,11 +199,11 @@ export function Signatures() {
       </header>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-b24-border bg-white px-3 py-2 sm:max-w-sm">
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-b24-border bg-surface px-3 py-2 sm:max-w-sm">
           <Search size={16} className="shrink-0 text-steel" />
           <input value={search} maxLength={120} onChange={(event) => changeSearch(event.target.value)} placeholder="Buscar colaborador, e-mail ou ID" className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none" />
         </label>
-        <div className="flex max-w-full gap-1 overflow-x-auto rounded border border-b24-border bg-white p-1" aria-label="Filtrar termos">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded border border-b24-border bg-surface p-1" aria-label="Filtrar termos">
           {filters.map((item) => (
             <button key={item.id} onClick={() => changeFilter(item.id)} aria-pressed={filter === item.id} className={`focus-ring shrink-0 rounded px-2.5 py-1.5 text-xs font-medium transition ${filter === item.id ? 'bg-sky-50 text-b24-blue-dark' : 'text-steel hover:bg-b24-bg hover:text-ink'}`}>{item.label}</button>
           ))}
@@ -217,7 +217,7 @@ export function Signatures() {
             {selectedIds.size === maxBulkSelection && <span className="ml-2 font-normal text-steel">Limite de {maxBulkSelection} por operação.</span>}
           </span>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setSelectedIds(new Set())} className="focus-ring rounded px-2.5 py-1.5 text-xs font-medium text-steel hover:bg-white hover:text-ink">
+            <button type="button" onClick={() => setSelectedIds(new Set())} className="focus-ring rounded px-2.5 py-1.5 text-xs font-medium text-steel hover:bg-surface hover:text-ink">
               Limpar seleção
             </button>
             <button type="button" onClick={openRemoveDialog} className="focus-ring inline-flex items-center gap-1.5 rounded bg-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">
@@ -228,7 +228,7 @@ export function Signatures() {
       )}
 
       {canOperate && visible.length > 0 && (
-        <label className="mb-2 flex items-center gap-2 rounded border border-b24-border bg-white px-3 py-2 text-xs font-medium text-steel lg:hidden">
+        <label className="mb-2 flex items-center gap-2 rounded border border-b24-border bg-surface px-3 py-2 text-xs font-medium text-steel lg:hidden">
           <input
             ref={mobileSelectAllRef}
             type="checkbox"
@@ -243,7 +243,7 @@ export function Signatures() {
         </label>
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden rounded border border-b24-border bg-white">
+      <div className="flex flex-1 flex-col overflow-hidden rounded border border-b24-border bg-surface">
         <div className="hidden items-center border-b border-b24-border bg-b24-bg/60 px-5 py-2.5 text-xs font-semibold text-steel lg:flex">
           {canOperate && (
             <span className="flex w-10 shrink-0 items-center">
@@ -270,7 +270,7 @@ export function Signatures() {
               <FileText className="mx-auto text-coral" size={32} />
               <p className="mt-3 font-medium text-ink">Não foi possível carregar os termos</p>
               <p className="mt-1 text-xs text-steel">Verifique a conexão e tente novamente.</p>
-              <button type="button" onClick={() => requestsQuery.refetch()} className="focus-ring mt-4 inline-flex items-center gap-2 rounded border border-b24-border bg-white px-3.5 py-2 text-xs font-semibold text-b24-blue-dark hover:bg-sky-50">
+              <button type="button" onClick={() => requestsQuery.refetch()} className="focus-ring mt-4 inline-flex items-center gap-2 rounded border border-b24-border bg-surface px-3.5 py-2 text-xs font-semibold text-b24-blue-dark hover:bg-sky-50">
                 <RefreshCw size={14} /> Tentar novamente
               </button>
             </div>
@@ -334,7 +334,7 @@ export function Signatures() {
                         </div>
                         {signature && <SignatureActions signature={signature} localMode={localMode} canOperate={canOperate} onSync={() => refresh.mutate(signature.id)} onRetry={() => retry.mutate(signature.id)} onRetryArchive={() => retryArchive.mutate(signature.id)} onDownload={() => download(signature.id)} />}
                       </div>
-                      {!!request.equipment?.length && <div className="mt-4 flex flex-wrap gap-2">{request.equipment.map((item, index) => <span key={item.id || index} className="rounded-full border border-b24-border bg-white px-2.5 py-1 text-xs text-steel">{item.quantity}× {item.description}{item.assetTag ? ` · Patrimônio ${item.assetTag}` : ''}</span>)}</div>}
+                      {!!request.equipment?.length && <div className="mt-4 flex flex-wrap gap-2">{request.equipment.map((item, index) => <span key={item.id || index} className="rounded-full border border-b24-border bg-surface px-2.5 py-1 text-xs text-steel">{item.quantity}× {item.description}{item.assetTag ? ` · Patrimônio ${item.assetTag}` : ''}</span>)}</div>}
                       {(request.failureReason || signature?.archiveError) && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-xs text-coral">{request.failureReason || signature?.archiveError}</p>}
                     </div>
                   )}
@@ -352,7 +352,7 @@ export function Signatures() {
                 type="button"
                 disabled={requestsQuery.isFetchingNextPage}
                 onClick={() => requestsQuery.fetchNextPage()}
-                className="focus-ring inline-flex items-center gap-2 rounded border border-b24-border bg-white px-3.5 py-2 text-xs font-semibold text-b24-blue-dark hover:bg-sky-50 disabled:opacity-60"
+                className="focus-ring inline-flex items-center gap-2 rounded border border-b24-border bg-surface px-3.5 py-2 text-xs font-semibold text-b24-blue-dark hover:bg-sky-50 disabled:opacity-60"
               >
                 <RefreshCw size={14} className={requestsQuery.isFetchingNextPage ? 'animate-spin' : ''} />
                 {requestsQuery.isFetchingNextPage
@@ -395,10 +395,10 @@ function SignatureActions({ signature, localMode, canOperate, onSync, onRetry, o
   const retryable = ['ERROR', 'DECLINED', 'CANCELED'].includes(signature.status);
   return (
     <div className="flex flex-wrap gap-2 md:justify-end">
-      {canOperate && localMode && signature.providerDocumentId && !finished && <a href={`/assinar/${encodeURIComponent(signature.providerDocumentId)}`} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-blue/40 bg-white px-2.5 py-2 text-xs font-medium text-b24-blue-dark hover:bg-sky-50"><ExternalLink size={14} /> Abrir assinatura</a>}
-      {canOperate && !finished && <button onClick={onSync} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-white px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RefreshCw size={14} /> Atualizar</button>}
-      {canOperate && retryable && <button onClick={onRetry} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-white px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RotateCcw size={14} /> Tentar novamente</button>}
-      {canOperate && signature.status === 'SIGNED' && ['PENDING', 'FAILED'].includes(signature.archiveStatus || '') && <button onClick={onRetryArchive} className="focus-ring inline-flex items-center gap-1.5 rounded border border-red-200 bg-white px-2.5 py-2 text-xs font-medium text-coral hover:bg-red-50"><RotateCcw size={14} /> Salvar no Drive</button>}
+      {canOperate && localMode && signature.providerDocumentId && !finished && <a href={`/assinar/${encodeURIComponent(signature.providerDocumentId)}`} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-blue/40 bg-surface px-2.5 py-2 text-xs font-medium text-b24-blue-dark hover:bg-sky-50"><ExternalLink size={14} /> Abrir assinatura</a>}
+      {canOperate && !finished && <button onClick={onSync} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-surface px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RefreshCw size={14} /> Atualizar</button>}
+      {canOperate && retryable && <button onClick={onRetry} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-surface px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RotateCcw size={14} /> Tentar novamente</button>}
+      {canOperate && signature.status === 'SIGNED' && ['PENDING', 'FAILED'].includes(signature.archiveStatus || '') && <button onClick={onRetryArchive} className="focus-ring inline-flex items-center gap-1.5 rounded border border-red-200 bg-surface px-2.5 py-2 text-xs font-medium text-coral hover:bg-red-50"><RotateCcw size={14} /> Salvar no Drive</button>}
       {signature.archiveStatus === 'ARCHIVED' && <button onClick={onDownload} className="focus-ring inline-flex items-center gap-1.5 rounded bg-b24-blue px-2.5 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><Download size={14} /> Baixar PDF</button>}
     </div>
   );
@@ -419,7 +419,7 @@ function RemoveHistoryDialog({ count, pending, error, confirmRef, onCancel, onCo
         if (event.target === event.currentTarget && !pending) onCancel();
       }}
     >
-      <div role="dialog" aria-modal="true" aria-labelledby="remove-history-title" aria-describedby="remove-history-description" className="w-full max-w-md rounded-xl border border-b24-border bg-white p-5 shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-labelledby="remove-history-title" aria-describedby="remove-history-description" className="w-full max-w-md rounded-xl border border-b24-border bg-surface p-5 shadow-2xl">
         <span className="mb-3 grid h-10 w-10 place-items-center rounded-full bg-red-50 text-coral"><Trash2 size={19} /></span>
         <h2 id="remove-history-title" className="text-lg font-semibold text-ink">Remover do histórico?</h2>
         <p id="remove-history-description" className="mt-2 text-sm leading-6 text-steel">
@@ -427,7 +427,7 @@ function RemoveHistoryDialog({ count, pending, error, confirmRef, onCancel, onCo
         </p>
         {error && <p role="alert" className="mt-3 rounded bg-red-50 px-3 py-2 text-xs text-coral">{removeErrorMessage(error)}</p>}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" disabled={pending} onClick={onCancel} className="focus-ring rounded border border-b24-border bg-white px-3.5 py-2 text-sm font-medium text-steel hover:bg-zinc-50 disabled:opacity-50">
+          <button type="button" disabled={pending} onClick={onCancel} className="focus-ring rounded border border-b24-border bg-surface px-3.5 py-2 text-sm font-medium text-steel hover:bg-zinc-50 disabled:opacity-50">
             Cancelar
           </button>
           <button ref={confirmRef} type="button" disabled={pending} onClick={onConfirm} className="focus-ring inline-flex items-center gap-2 rounded bg-coral px-3.5 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50">

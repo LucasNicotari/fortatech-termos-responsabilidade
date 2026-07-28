@@ -27,7 +27,7 @@ function SignerProtected() {
   const { token, accessMode, loading, error } = useAuth();
   if (loading) return <main className="p-8 text-steel">Abrindo termo para assinatura...</main>;
   if (!token || accessMode !== 'SIGNER') {
-    return <main className="grid min-h-screen place-items-center bg-b24-bg p-5"><div className="max-w-md rounded-lg border border-b24-border bg-white p-8 text-center"><h1 className="text-xl font-semibold text-ink">Abra pelo chat do Bitrix24</h1><p className="mt-2 text-sm text-steel">{error || 'Use o link pessoal recebido no chat para acessar este termo.'}</p></div></main>;
+    return <main className="grid min-h-screen place-items-center bg-b24-bg p-5"><div className="max-w-md rounded-lg border border-b24-border bg-surface p-8 text-center"><h1 className="text-xl font-semibold text-ink">Abra pelo chat do Bitrix24</h1><p className="mt-2 text-sm text-steel">{error || 'Use o link pessoal recebido no chat para acessar este termo.'}</p></div></main>;
   }
   return <InternalSigning />;
 }

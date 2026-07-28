@@ -9,8 +9,10 @@ import {
   FileSignature,
   FileText,
   LogOut,
+  Moon,
   Settings,
   SlidersHorizontal,
+  Sun,
   UsersRound
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +21,7 @@ import { UserAvatar } from './UserAvatar';
 import { BitrixFrameSync } from './BitrixFrameSync';
 import { api } from '../services/api';
 import { BitrixEmployee } from '../types';
+import { useTheme } from '../hooks/useTheme';
 
 const primaryItems = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
@@ -35,6 +38,7 @@ const settingsItems = [
 
 export function PageShell() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const { data: bitrixEmployees = [] } = useQuery({
@@ -69,7 +73,7 @@ export function PageShell() {
   return (
     <div className="min-h-screen bg-b24-bg">
       <BitrixFrameSync />
-      <header className="sticky top-0 z-30 border-t-[3px] border-t-b24-blue bg-white shadow-[0_2px_10px_rgba(82,92,105,0.08)]">
+      <header className="sticky top-0 z-30 border-t-[3px] border-t-b24-blue bg-surface shadow-[0_2px_10px_rgba(82,92,105,0.08)]">
         <div className="mx-auto max-w-[1600px] px-3 sm:px-5 lg:px-7">
           <div className="flex min-h-[58px] items-center gap-3 lg:gap-5">
             <Link to="/" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FortaDocs - Dashboard">
@@ -89,7 +93,16 @@ export function PageShell() {
               ))}
             </nav>
 
-            <div ref={profileRef} className="relative ml-auto shrink-0">
+            <div ref={profileRef} className="relative ml-auto flex shrink-0 items-center">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="focus-ring mr-1 inline-grid h-9 w-9 place-items-center rounded-lg border border-transparent text-steel transition hover:border-b24-border hover:bg-b24-bg hover:text-ink"
+                aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
+                title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+              >
+                {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+              </button>
               <button
                 type="button"
                 onClick={() => setProfileOpen((open) => !open)}
@@ -98,7 +111,7 @@ export function PageShell() {
                 className={`focus-ring flex items-center gap-2 rounded-xl border px-2 py-1.5 transition sm:gap-3 sm:px-3 ${
                   profileOpen
                     ? 'border-sky-200 bg-sky-50 shadow-sm'
-                    : 'border-transparent bg-b24-bg/60 hover:border-b24-border hover:bg-white hover:shadow-sm'
+                    : 'border-transparent bg-b24-bg/60 hover:border-b24-border hover:bg-surface hover:shadow-sm'
                 }`}
               >
                 <span className="hidden max-w-[220px] text-right sm:block">
@@ -110,8 +123,8 @@ export function PageShell() {
               </button>
 
               {profileOpen && (
-                <div role="menu" className="absolute right-0 top-[calc(100%+10px)] w-[290px] overflow-hidden rounded-xl border border-b24-border bg-white shadow-[0_18px_45px_rgba(82,92,105,0.22)]">
-                  <div className="border-b border-b24-border bg-gradient-to-br from-sky-50 to-white px-4 py-3.5">
+                <div role="menu" className="absolute right-0 top-[calc(100%+10px)] w-[290px] overflow-hidden rounded-xl border border-b24-border bg-surface shadow-[0_18px_45px_rgba(82,92,105,0.22)]">
+                  <div className="border-b border-b24-border bg-gradient-to-br from-sky-50 to-surface px-4 py-3.5">
                     <div className="flex min-w-0 items-center gap-3">
                       <UserAvatar name={user?.name || 'Usuário'} photoUrl={currentUserPhoto} />
                       <div className="min-w-0">

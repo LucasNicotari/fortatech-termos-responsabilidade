@@ -80,7 +80,7 @@ export function Templates({ embedded = false }: { embedded?: boolean }) {
     <section>
       {embedded ? <div className="mb-4"><h2 className="font-semibold text-ink">Modelos de termo</h2><p className="mt-1 text-sm text-steel">Gerencie versões sem apagar o histórico dos documentos.</p></div> : <><h1 className="mb-2 text-2xl font-bold text-ink">Modelos de termo</h1><p className="mb-6 text-sm text-steel">Envie novas versões sem apagar as anteriores. A versão padrão será usada somente nos próximos termos.</p></>}
 
-      <form onSubmit={submit} className="mb-6 rounded border border-zinc-200 bg-white p-4 sm:p-5">
+      <form onSubmit={submit} className="mb-6 rounded border border-zinc-200 bg-surface p-4 sm:p-5">
         <h2 className="font-semibold text-ink">Adicionar DOCX</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <label className="grid gap-1 text-sm text-steel">Tipo de termo
@@ -93,7 +93,7 @@ export function Templates({ embedded = false }: { embedded?: boolean }) {
           <Field label="Versão" value={version} onChange={setVersion} placeholder="Ex.: 1.0" />
           <Field label="Descrição" value={description} onChange={setDescription} placeholder="Resumo das alterações" />
           <label className="grid gap-1 text-sm text-steel">Arquivo DOCX
-            <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setFile(event.target.files?.[0] || null)} className="min-w-0 rounded border border-zinc-300 bg-white px-3 py-2 text-ink" />
+            <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setFile(event.target.files?.[0] || null)} className="min-w-0 rounded border border-zinc-300 bg-surface px-3 py-2 text-ink" />
           </label>
           <label className="flex items-center gap-2 self-end rounded bg-zinc-50 px-3 py-2 text-sm text-steel">
             <input type="checkbox" checked={makeDefault} onChange={(event) => setMakeDefault(event.target.checked)} className="h-4 w-4 accent-emerald-600" />
@@ -116,7 +116,7 @@ export function Templates({ embedded = false }: { embedded?: boolean }) {
 
       <div className="grid gap-5">
         {data.map((template) => (
-          <article key={template.id} className="overflow-hidden rounded border border-zinc-200 bg-white">
+          <article key={template.id} className="overflow-hidden rounded border border-zinc-200 bg-surface">
             <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
               <h2 className="font-semibold text-ink">{template.nome}</h2>
               {template.descricao && <p className="mt-1 text-sm text-steel">{template.descricao}</p>}

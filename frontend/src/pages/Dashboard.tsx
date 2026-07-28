@@ -34,20 +34,20 @@ export function Dashboard() {
         <div><h1 className="text-xl font-bold tracking-tight text-ink">Visão geral</h1><p className="mt-0.5 text-xs text-steel">Resumo do que exige acompanhamento agora.</p></div>
         <div className="flex items-center gap-2">
           <span className="hidden items-center gap-1.5 text-xs text-steel sm:flex"><span className="h-2 w-2 rounded-full bg-b24-green" /> {updatedAt ? `Atualizado às ${updatedAt}` : 'Dados atualizados'}</span>
-          <button onClick={() => refetch()} disabled={isFetching} aria-label="Atualizar dashboard" title="Atualizar dashboard" className="focus-ring grid h-9 w-9 place-items-center rounded border border-b24-border bg-white text-steel hover:bg-sky-50 hover:text-b24-blue-dark disabled:opacity-60"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} /></button>
+          <button onClick={() => refetch()} disabled={isFetching} aria-label="Atualizar dashboard" title="Atualizar dashboard" className="focus-ring grid h-9 w-9 place-items-center rounded border border-b24-border bg-surface text-steel hover:bg-sky-50 hover:text-b24-blue-dark disabled:opacity-60"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} /></button>
           {user?.canOperate && <Link to="/send-requests" className="focus-ring inline-flex h-9 items-center gap-2 rounded bg-b24-blue px-3.5 text-sm font-semibold text-white hover:bg-b24-blue-dark"><FilePlus2 size={17} /> Novo termo</Link>}
         </div>
       </header>
 
       <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
         {cards.map((card) => (
-          <Link key={card.label} to={card.to} className="group focus-ring min-w-0 rounded-lg border border-b24-border bg-white p-3 transition last:col-span-2 hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-sm md:last:col-span-1">
+          <Link key={card.label} to={card.to} className="group focus-ring min-w-0 rounded-lg border border-b24-border bg-surface p-3 transition last:col-span-2 hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-sm md:last:col-span-1">
             <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-[11px] font-semibold uppercase tracking-wide text-steel">{card.label}</p><p className="mt-1.5 text-2xl font-bold leading-none text-ink">{card.value}</p><p className="mt-1.5 truncate text-[11px] text-steel">{card.detail}</p></div><span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${card.tone}`}><card.icon size={15} /></span></div>
           </Link>
         ))}
       </div>
 
-      <article className="flex flex-1 flex-col overflow-hidden rounded border border-b24-border bg-white">
+      <article className="flex flex-1 flex-col overflow-hidden rounded border border-b24-border bg-surface">
         <div className="flex items-center justify-between gap-3 border-b border-b24-border px-4 py-2.5"><div><h2 className="text-sm font-semibold text-ink">Termos recentes</h2><p className="mt-0.5 text-[11px] text-steel">Movimentações que merecem acompanhamento.</p></div><Link to="/terms" className="focus-ring hidden items-center gap-1.5 rounded text-xs font-semibold text-b24-blue-dark hover:underline sm:inline-flex">Abrir Termos <ArrowRight size={14} /></Link></div>
         {data?.latestSignatures.length ? (
           <div className="divide-y divide-b24-border/80">
@@ -70,5 +70,5 @@ function LoadError({ onRetry }: { onRetry: () => void }) {
 }
 
 function DashboardSkeleton() {
-  return <section className="mx-auto max-w-[1600px] animate-pulse" aria-label="Carregando dashboard"><div className="mb-3 h-11 w-64 max-w-full rounded bg-zinc-200" /><div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">{Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-24 rounded border border-b24-border bg-white" />)}</div><div className="h-48 rounded border border-b24-border bg-white" /></section>;
+  return <section className="mx-auto max-w-[1600px] animate-pulse" aria-label="Carregando dashboard"><div className="mb-3 h-11 w-64 max-w-full rounded bg-zinc-200" /><div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">{Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-24 rounded border border-b24-border bg-surface" />)}</div><div className="h-48 rounded border border-b24-border bg-surface" /></section>;
 }
