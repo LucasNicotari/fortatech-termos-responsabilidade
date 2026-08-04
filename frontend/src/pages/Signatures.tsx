@@ -1,11 +1,10 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Download, ExternalLink, FilePlus2, FileText, Package, RefreshCw, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { BitrixEmployee, SendRequest, Signature } from '../types';
+import { SendRequest, Signature } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
-import { UserAvatar } from '../components/UserAvatar';
 import { formatDate } from '../utils/format';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -51,12 +50,6 @@ export function Signatures() {
     initialPageParam: '',
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined
   });
-  const { data: bitrixEmployees = [] } = useQuery({
-    queryKey: ['bitrix-term-employees'],
-    queryFn: async () => (await api.get<BitrixEmployee[]>('/bitrix/term-employees')).data,
-    retry: false
-  });
-  const photosById = useMemo(() => new Map(bitrixEmployees.map((employee) => [String(employee.ID), employee.PERSONAL_PHOTO])), [bitrixEmployees]);
   const requests = useMemo(
     () => requestsQuery.data?.pages.flatMap((page) => page.items) || [],
     [requestsQuery.data]
@@ -309,9 +302,8 @@ export function Signatures() {
                       </span>
                     )}
                     <button onClick={() => setExpandedId(expanded ? null : request.id)} aria-expanded={expanded} className="focus-ring grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left lg:grid-cols-[minmax(240px,1.4fr)_minmax(180px,1fr)_150px_130px_32px] lg:gap-4 lg:px-5">
-                      <span className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
-                        <UserAvatar name={employeeName} photoUrl={photosById.get(String(request.employee?.bitrixId))} />
-                        <span className="min-w-0"><strong className="block truncate text-sm text-ink">{employeeName}</strong><span className="block truncate text-xs text-steel">{request.employee?.email || 'Sem e-mail'}{request.employee?.bitrixId ? ` · ID ${request.employee.bitrixId}` : ''}</span></span>
+                      <span className="col-span-2 min-w-0 lg:col-span-1">
+                        <strong className="block truncate text-sm text-ink">{employeeName}</strong>
                       </span>
                       <span className="min-w-0"><span className="block truncate text-sm text-ink">{request.documentFileName || 'Documento em preparação'}</span><span className="mt-0.5 flex items-center gap-1 text-xs text-steel"><Package size={13} /> {request.equipment?.length || 0} {(request.equipment?.length || 0) === 1 ? 'item' : 'itens'}</span></span>
                       <span><StatusBadge status={status} /></span>
@@ -399,6 +391,7 @@ function SignatureActions({ signature, localMode, canOperate, onSync, onRetry, o
       {canOperate && !finished && <button onClick={onSync} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-surface px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RefreshCw size={14} /> Atualizar</button>}
       {canOperate && retryable && <button onClick={onRetry} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-surface px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RotateCcw size={14} /> Tentar novamente</button>}
       {canOperate && signature.status === 'SIGNED' && ['PENDING', 'FAILED'].includes(signature.archiveStatus || '') && <button onClick={onRetryArchive} className="focus-ring inline-flex items-center gap-1.5 rounded border border-red-200 bg-surface px-2.5 py-2 text-xs font-medium text-coral hover:bg-red-50"><RotateCcw size={14} /> Salvar no Drive</button>}
+      {signature.archiveStatus === 'ARCHIVED' && signature.bitrixDriveDetailUrl && <a href={signature.bitrixDriveDetailUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-blue/40 bg-surface px-2.5 py-2 text-xs font-medium text-b24-blue-dark hover:bg-sky-50"><ExternalLink size={14} /> Abrir no Drive</a>}
       {signature.archiveStatus === 'ARCHIVED' && <button onClick={onDownload} className="focus-ring inline-flex items-center gap-1.5 rounded bg-b24-blue px-2.5 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><Download size={14} /> Baixar PDF</button>}
     </div>
   );

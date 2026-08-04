@@ -61,6 +61,25 @@ Na homologação atual, `BITRIX_DRIVE_OWNER_USER_ID=8465` e
 `BITRIX_DRIVE_FOLDER_NAME=Termo de Responsabilidade`. O código usa as variáveis, e não o ID
 fixo, para permitir a futura migração a uma conta técnica ou Drive empresarial.
 
+### Envio de até cinco termos
+
+A tela **Envio de termo** mantém até cinco formulários independentes no navegador. O operador alterna
+entre eles por abas compactas, gera as prévias e confirma uma única ação de envio. Internamente, cada
+termo continua sendo uma `SendRequest`, com colaborador, equipamentos, PDF, assinatura, convite e
+auditoria próprios. As chamadas são executadas de forma sequencial para respeitar a fila de conversão
+e os limites do Bitrix24; uma falha não interrompe os termos seguintes e a nova tentativa atua somente
+nos itens que falharam. O histórico persistido continua sendo a fonte da verdade se uma resposta HTTP
+se perder durante o envio.
+
+### Arquivamento idempotente no Drive
+
+O backend procura primeiro o Drive pessoal pelo usuário configurado. Se o filtro do Bitrix24 responder
+vazio, faz uma segunda busca paginada antes de declarar indisponibilidade e mantém o resultado em cache
+por cinco minutos. `BITRIX_DRIVE_STORAGE_ID` pode fixar opcionalmente o armazenamento depois de sua
+identificação. O nome físico do PDF recebe um marcador determinístico da assinatura; antes e depois de
+um upload ambíguo, o backend procura esse nome na pasta. Assim, repetir a operação confirma o arquivo
+existente em vez de criar uma cópia com sufixo `(1)`.
+
 ## Fluxo ponta a ponta
 
 ```mermaid

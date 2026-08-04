@@ -1,34 +1,57 @@
 import { WorkflowService } from './workflow.service';
 
 describe('WorkflowService', () => {
-  it('exibe somente usuarios ativos em ordem alfabetica pelo nome apresentado', async () => {
+  it('returns only users with access or notifications in the settings list', async () => {
+    const service = new WorkflowService(
+      {
+        termWorkflowParticipant: {
+          findMany: jest.fn().mockResolvedValue([
+            { bitrixUserId: '1', canOperate: true, receiveNotifications: false }
+          ])
+        },
+        user: {
+          findMany: jest.fn().mockResolvedValue([
+            { bitrixUserId: '1', active: true, role: 'TI' }
+          ])
+        }
+      } as never,
+      { getUserWithDepartment: jest.fn().mockResolvedValue(
+        { ID: '1', NAME: 'Alvaro', ACTIVE: true, PERSONAL_PHOTO: 'https://portal.example/avatar/1.jpg' }
+      ) } as never,
+      {} as never
+    );
+
+    const matrix = await service.matrix();
+
+    expect(matrix.map((item) => item.name)).toEqual(['Alvaro']);
+    expect(matrix[0]).toMatchObject({
+      bitrixUserId: 1,
+      hasAccess: true,
+      role: 'TI',
+      canOperate: true,
+      receiveNotifications: false
+    });
+  });
+
+  it('filters candidates ignoring accents', async () => {
     const service = new WorkflowService(
       {
         termWorkflowParticipant: { findMany: jest.fn().mockResolvedValue([]) },
         user: { findMany: jest.fn().mockResolvedValue([]) }
       } as never,
       { listEmployeesWithDepartments: jest.fn().mockResolvedValue([
-        { ID: '2', NAME: 'Zuleica', ACTIVE: false },
-        { ID: '3', EMAIL: 'gabriel@example.com', ACTIVE: true },
-        { ID: '1', NAME: 'Álvaro', ACTIVE: true, PERSONAL_PHOTO: 'https://portal.example/avatar/1.jpg' }
+        { ID: '1', NAME: 'Álvaro', ACTIVE: true, DEPARTMENT_NAME: 'Tecnologia' },
+        { ID: '2', NAME: 'Beatriz', ACTIVE: true, DEPARTMENT_NAME: 'Financeiro' }
       ]) } as never,
       {} as never
     );
 
-    const matrix = await service.matrix();
-
-    expect(matrix.map((item) => item.name)).toEqual(['Álvaro', 'gabriel@example.com']);
-    expect(matrix.find((item) => item.bitrixUserId === 1)?.photoUrl).toBe('https://portal.example/avatar/1.jpg');
-    expect(matrix.find((item) => item.bitrixUserId === 1)).toMatchObject({
-      hasAccess: false,
-      role: 'RH',
-      canOperate: false,
-      receiveNotifications: false
-    });
-    expect(matrix.find((item) => item.bitrixUserId === 2)).toBeUndefined();
+    await expect(service.candidates('alvaro')).resolves.toEqual([
+      expect.objectContaining({ bitrixUserId: 1, name: 'Álvaro' })
+    ]);
   });
 
-  it('permite uma lista vazia de notificados depois que a configuracao foi persistida', async () => {
+  it('allows an empty notification list after settings were persisted', async () => {
     const service = new WorkflowService(
       {
         termWorkflowParticipant: {
@@ -43,7 +66,7 @@ describe('WorkflowService', () => {
     await expect(service.notificationRecipientIds()).resolves.toEqual([]);
   });
 
-  it('usa as variaveis apenas como contingencia antes da primeira configuracao', async () => {
+  it('uses environment defaults only before the first persisted configuration', async () => {
     const service = new WorkflowService(
       {
         termWorkflowParticipant: {

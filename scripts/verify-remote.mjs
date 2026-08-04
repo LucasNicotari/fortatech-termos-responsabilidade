@@ -1,6 +1,7 @@
 const backend = process.env.FORTADOCS_BACKEND_URL || 'https://fortatech-termos-api-hml.onrender.com';
 const frontend = process.env.FORTADOCS_FRONTEND_URL || 'https://fortatech-termos-web-hml.onrender.com';
 const portal = 'https://fortaeqt.bitrix24.com.br';
+const expectApiDocs = process.env.FORTADOCS_EXPECT_API_DOCS === 'true';
 
 async function fetchWithTimeout(url, options = {}, timeout = 90_000) {
   return fetch(url, { ...options, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
@@ -11,14 +12,17 @@ function assert(condition, message) {
 }
 
 async function main() {
-  process.stdout.write('[remote] Acordando e validando o backend...\n');
+  process.stdout.write('[remote] Validando o backend...\n');
   const healthResponse = await fetchWithTimeout(`${backend}/health`);
   assert(healthResponse.ok, `/health retornou HTTP ${healthResponse.status}`);
   const health = await healthResponse.json();
   assert(health.status === 'ok' && health.database === 'reachable', 'Backend ou banco nao esta saudavel');
 
   const docs = await fetchWithTimeout(`${backend}/docs`, {}, 30_000);
-  assert(docs.ok, `/docs retornou HTTP ${docs.status}`);
+  assert(
+    expectApiDocs ? docs.ok : docs.status === 404,
+    `/docs retornou HTTP ${docs.status}; esperado ${expectApiDocs ? '2xx' : '404'}`
+  );
 
   const protectedRoute = await fetchWithTimeout(`${backend}/signature-provider/status`, {}, 30_000);
   assert(protectedRoute.status === 401, `Rota protegida retornou ${protectedRoute.status}; esperado 401`);
@@ -44,7 +48,7 @@ async function main() {
     || html.match(/<script[^>]+src="([^"]+\.js)"[^>]+type="module"/)?.[1];
   assert(assetPath, 'Bundle JavaScript nao encontrado no HTML');
   const asset = await (await fetchWithTimeout(new URL(assetPath, frontend).toString(), {}, 30_000)).text();
-  assert(asset.includes(backend), 'Frontend nao foi compilado com a URL do backend HML');
+  assert(asset.includes(backend), 'Frontend nao foi compilado com a URL publica do backend');
 
   process.stdout.write(`[remote] OK - revisao ${health.revision || 'desconhecida'}\n`);
   process.stdout.write(`[remote] Backend: ${backend}\n`);

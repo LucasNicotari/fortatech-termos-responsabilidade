@@ -1,26 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import {
-  Activity,
   BarChart3,
   ChevronDown,
   FilePlus2,
   FileSignature,
-  FileText,
   LogOut,
   Moon,
   Settings,
-  SlidersHorizontal,
-  Sun,
-  UsersRound
+  Sun
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { FortaTechMark } from './FortaTechMark';
-import { UserAvatar } from './UserAvatar';
 import { BitrixFrameSync } from './BitrixFrameSync';
-import { api } from '../services/api';
-import { BitrixEmployee } from '../types';
 import { useTheme } from '../hooks/useTheme';
 
 const primaryItems = [
@@ -29,24 +21,11 @@ const primaryItems = [
   { to: '/terms', label: 'Termos', icon: FileSignature }
 ];
 
-const settingsItems = [
-  { to: '/settings', label: 'Configurações', icon: Settings },
-  { to: '/settings?tab=access', label: 'Usuários e acessos', icon: UsersRound },
-  { to: '/settings?tab=templates', label: 'Templates', icon: FileText },
-  { to: '/settings?tab=activity', label: 'Atividades', icon: Activity }
-];
-
 export function PageShell() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
-  const { data: bitrixEmployees = [] } = useQuery({
-    queryKey: ['bitrix-term-employees'],
-    queryFn: async () => (await api.get<BitrixEmployee[]>('/bitrix/term-employees')).data,
-    enabled: Boolean(user?.bitrixUserId),
-    staleTime: 5 * 60 * 1000
-  });
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -65,7 +44,6 @@ export function PageShell() {
   }, [profileOpen]);
 
   const role = user?.role === 'ADMIN' ? 'Administrador' : user?.role;
-  const currentUserPhoto = bitrixEmployees.find((employee) => String(employee.ID) === String(user?.bitrixUserId))?.PERSONAL_PHOTO;
   const visiblePrimaryItems = user?.canOperate
     ? primaryItems
     : primaryItems.filter((item) => item.to !== '/send-requests');
@@ -75,7 +53,7 @@ export function PageShell() {
       <BitrixFrameSync />
       <header className="sticky top-0 z-30 border-t-[3px] border-t-b24-blue bg-surface/95 shadow-[0_2px_14px_rgba(23,34,45,0.08)] backdrop-blur-md">
         <div className="mx-auto max-w-[1600px] px-3 sm:px-5 lg:px-7">
-          <div className="flex min-h-[58px] items-center gap-3 lg:gap-5">
+          <div className="relative flex min-h-[58px] items-center gap-3 lg:gap-5">
             <Link to="/" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FortaDocs - Dashboard">
               <FortaTechMark className="h-9 w-9 shrink-0 shadow-sm" />
               <span className="text-xl font-extrabold leading-none tracking-[-0.04em] sm:text-[22px]">
@@ -93,11 +71,11 @@ export function PageShell() {
               ))}
             </nav>
 
-            <div ref={profileRef} className="relative ml-auto flex shrink-0 items-center">
+            <div ref={profileRef} className="fixed right-3 top-[13px] z-40 flex shrink-0 items-center md:relative md:right-auto md:top-auto md:z-auto md:ml-auto">
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="focus-ring mr-1 inline-grid h-9 w-9 place-items-center rounded-full border border-transparent bg-b24-bg/60 text-steel transition hover:bg-b24-bg hover:text-b24-blue-dark"
+                className="focus-ring mr-1 hidden h-9 w-9 place-items-center rounded-full border border-transparent bg-b24-bg/60 text-steel transition hover:bg-b24-bg hover:text-b24-blue-dark sm:inline-grid"
                 aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
                 title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
               >
@@ -108,49 +86,39 @@ export function PageShell() {
                 onClick={() => setProfileOpen((open) => !open)}
                 aria-expanded={profileOpen}
                 aria-haspopup="menu"
-                className={`focus-ring flex items-center gap-2 rounded-xl border px-2 py-1.5 transition sm:gap-3 sm:px-3 ${
+                className={`focus-ring flex h-9 w-9 items-center justify-center rounded-xl border transition sm:h-auto sm:w-auto sm:max-w-none sm:gap-3 sm:px-3 sm:py-1.5 ${
                   profileOpen
                     ? 'border-sky-200 bg-sky-50 shadow-sm'
                     : 'border-transparent bg-b24-bg/60 hover:border-b24-border hover:bg-surface hover:shadow-sm'
                 }`}
               >
-                <span className="hidden max-w-[220px] text-right sm:block">
+                <span className="hidden text-right sm:block sm:w-auto sm:max-w-[220px]">
                   <span className="block truncate text-sm font-semibold leading-tight text-ink">{user?.name}</span>
-                  <span className="block truncate text-[10px] uppercase tracking-[0.08em] text-steel">{role}</span>
                 </span>
-                <UserAvatar name={user?.name || 'Usuário'} photoUrl={currentUserPhoto} size="sm" />
                 <ChevronDown size={15} className={`text-steel transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {profileOpen && (
                 <div role="menu" className="absolute right-0 top-[calc(100%+10px)] w-[290px] overflow-hidden rounded-xl border border-b24-border bg-surface shadow-[0_18px_45px_rgba(82,92,105,0.22)]">
                   <div className="border-b border-b24-border bg-gradient-to-br from-sky-50 to-surface px-4 py-3.5">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <UserAvatar name={user?.name || 'Usuário'} photoUrl={currentUserPhoto} />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-ink">{user?.name}</p>
-                        <p className="truncate text-xs text-steel">{user?.email}</p>
-                        <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-b24-blue-dark">{role}</p>
-                      </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-ink">{user?.name}</p>
+                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-b24-blue-dark">{role}</p>
                     </div>
                   </div>
 
                   {user?.role === 'ADMIN' && (
                     <div className="p-2">
                       <p className="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Administração</p>
-                      {settingsItems.map((item) => (
-                        <Link
-                          key={item.to}
-                          to={item.to}
-                          role="menuitem"
-                          onClick={() => setProfileOpen(false)}
-                          className="focus-ring flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-steel transition hover:bg-sky-50 hover:text-b24-blue-dark"
-                        >
-                          <item.icon size={17} />
-                          <span>{item.label}</span>
-                          {item.label === 'Configurações' && <SlidersHorizontal size={13} className="ml-auto text-zinc-300" />}
-                        </Link>
-                      ))}
+                      <Link
+                        to="/settings"
+                        role="menuitem"
+                        onClick={() => setProfileOpen(false)}
+                        className="focus-ring flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-steel transition hover:bg-sky-50 hover:text-b24-blue-dark"
+                      >
+                        <Settings size={17} />
+                        <span>Configurações</span>
+                      </Link>
                     </div>
                   )}
 

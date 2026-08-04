@@ -75,6 +75,6 @@ RUN chmod 0555 /app/docker-entrypoint.sh
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD ["node", "-e", "const port=process.env.PORT||process.env.BACKEND_PORT||3000;fetch(`http://127.0.0.1:${port}/health`).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+  CMD ["node", "-e", "const port=process.env.PORT||process.env.BACKEND_PORT||3000;fetch(`http://127.0.0.1:${port}/health/ready`).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/app/docker-entrypoint.sh"]

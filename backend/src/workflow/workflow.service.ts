@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, UserRole } from '@prisma/client';
+import { Prisma, TermWorkflowParticipant, User, UserRole } from '@prisma/client';
 import { BitrixService } from '../bitrix/bitrix.service';
+import { BitrixUser } from '../bitrix/bitrix.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 
@@ -14,11 +15,44 @@ export class WorkflowService {
   ) {}
 
   async matrix() {
+    const [assignments, appUsers] = await Promise.all([
+      this.prisma.termWorkflowParticipant.findMany(),
+      this.prisma.user.findMany({ where: { bitrixUserId: { not: null } } })
+    ]);
+    const selectedIds = new Set([
+      ...assignments
+        .filter((item) => item.canOperate || item.receiveNotifications)
+        .map((item) => item.bitrixUserId),
+      ...appUsers
+        .filter((item) => item.active)
+        .map((item) => item.bitrixUserId!)
+    ]);
+    const users = await Promise.all(
+      [...selectedIds].map((id) => this.bitrix.getUserWithDepartment(Number(id)))
+    );
+    return this.settingsUsers(this.mapUsers(users, assignments, appUsers));
+  }
+
+  async candidates(search: string) {
+    const normalized = this.normalize(search);
+    return (await this.directoryMatrix())
+      .filter((item) => !normalized || this.normalize(
+        `${item.name} ${item.email} ${item.workPosition} ${item.departmentName} ${item.bitrixUserId}`
+      ).includes(normalized))
+      .slice(0, 20)
+      .map((item) => this.settingsUser(item));
+  }
+
+  private async directoryMatrix() {
     const [users, assignments, appUsers] = await Promise.all([
       this.bitrix.listEmployeesWithDepartments(),
       this.prisma.termWorkflowParticipant.findMany(),
       this.prisma.user.findMany({ where: { bitrixUserId: { not: null } } })
     ]);
+    return this.mapUsers(users, assignments, appUsers);
+  }
+
+  private mapUsers(users: BitrixUser[], assignments: TermWorkflowParticipant[], appUsers: User[]) {
     const byId = new Map(assignments.map((item) => [item.bitrixUserId, item]));
     const appUserById = new Map(appUsers.map((item) => [item.bitrixUserId!, item]));
     return users.filter((user) => user.ACTIVE !== false && user.ACTIVE !== 'N').map((user) => {
@@ -30,7 +64,6 @@ export class WorkflowService {
         email: user.EMAIL || '',
         workPosition: user.WORK_POSITION || '',
         departmentName: user.DEPARTMENT_NAME || '',
-        photoUrl: user.PERSONAL_PHOTO || '',
         active: user.ACTIVE !== false && user.ACTIVE !== 'N',
         hasAccess: Boolean(appUser?.active || assignment?.canOperate),
         role: appUser?.role || (assignment?.canOperate ? UserRole.TI : UserRole.RH),
@@ -73,6 +106,14 @@ export class WorkflowService {
           create: { bitrixUserId: String(item.bitrixUserId), canOperate: item.canOperate, receiveNotifications: item.receiveNotifications, updatedByUserId }
         });
       }
+      const accessIds = requested.filter((item) => item.hasAccess).map((item) => String(item.bitrixUserId));
+      await transaction.user.updateMany({
+        where: {
+          bitrixUserId: { not: null, notIn: accessIds },
+          id: currentUser ? { not: currentUser.id } : undefined
+        },
+        data: { active: false }
+      });
       for (const item of requested) {
         const bitrixUser = validUsers.get(String(item.bitrixUserId))!;
         const name = [bitrixUser.NAME, bitrixUser.LAST_NAME].filter(Boolean).join(' ').trim() || `Bitrix ${bitrixUser.ID}`;
@@ -126,6 +167,26 @@ export class WorkflowService {
 
   private envIds(key: string) {
     return [...new Set((this.config.get<string>(key) || '').split(',').map((value) => value.trim()).filter(Boolean))];
+  }
+
+  private normalize(value: string) {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
+  }
+
+  private settingsUsers(items: ReturnType<WorkflowService['mapUsers']>) {
+    return items.map((item) => this.settingsUser(item));
+  }
+
+  private settingsUser(item: ReturnType<WorkflowService['mapUsers']>[number]) {
+    return {
+      bitrixUserId: item.bitrixUserId,
+      name: item.name,
+      active: item.active,
+      hasAccess: item.hasAccess,
+      role: item.role,
+      canOperate: item.canOperate,
+      receiveNotifications: item.receiveNotifications
+    };
   }
 
   private toJson(value: unknown): Prisma.InputJsonValue {

@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { PageShell } from './components/PageShell';
 import { useAuth } from './contexts/AuthContext';
@@ -11,13 +12,18 @@ const LocalSigning = lazy(() => import('./pages/LocalSigning').then((module) => 
 const InternalSigning = lazy(() => import('./pages/InternalSigning').then((module) => ({ default: module.InternalSigning })));
 
 function Protected() {
-  const { token, accessMode, loading, error } = useAuth();
+  const { token, accessMode, loading, error, reconnect } = useAuth();
   const localMode = import.meta.env.VITE_LOCAL_DEVELOPMENT_MODE === 'true';
   if (loading) return <main className="p-8 text-steel">{localMode ? 'Iniciando ambiente local...' : 'Conectando ao Bitrix24...'}</main>;
   if (!token || accessMode === 'SIGNER') return (
     <main className="mx-auto max-w-xl p-8">
       <h1 className="mb-3 text-2xl font-bold text-ink">{localMode ? 'Ambiente local indisponível' : 'Abra pelo Bitrix24'}</h1>
       <p className="text-steel">{error || (localMode ? 'Não foi possível criar a sessão local.' : 'Este aplicativo usa a identidade do Bitrix24 e precisa ser aberto pelo menu do portal.')}</p>
+      {!localMode && (
+        <button type="button" onClick={reconnect} className="focus-ring mt-5 inline-flex items-center gap-2 rounded bg-b24-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-b24-blue-dark">
+          <RefreshCw size={16} /> Reconectar ao Bitrix24
+        </button>
+      )}
     </main>
   );
   return <PageShell />;

@@ -23,7 +23,7 @@ export class WorkflowAssignmentDto {
 
 export class UpdateWorkflowDto {
   @IsArray()
-  @ArrayMaxSize(5000)
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => WorkflowAssignmentDto)
   assignments!: WorkflowAssignmentDto[];

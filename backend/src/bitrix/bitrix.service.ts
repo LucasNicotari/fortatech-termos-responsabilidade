@@ -3,6 +3,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BitrixInstallation } from '@prisma/client';
 import { isAxiosError } from 'axios';
+import { createHash } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { LogsService } from '../logs/logs.service';
 import { LOCAL_BITRIX_USERS, LOCAL_DEPARTMENTS } from '../local-development/local-fixtures';
@@ -27,7 +28,9 @@ export class BitrixService {
   private readonly localMode: boolean;
   private employeesCache?: { expiresAt: number; value: Promise<BitrixUser[]> };
   private departmentsCache?: { expiresAt: number; value: Promise<BitrixDepartment[]> };
+  private readonly driveStorageCache = new Map<string, { expiresAt: number; value: BitrixDiskStorage }>();
   private readonly directoryCacheTtlMs = 60_000;
+  private readonly driveStorageCacheTtlMs = 5 * 60_000;
 
   constructor(
     private readonly http: HttpService,
@@ -235,7 +238,7 @@ export class BitrixService {
     });
   }
 
-  async archiveResponsibilityTerm(pdf: Buffer, fileName: string) {
+  async archiveResponsibilityTerm(pdf: Buffer, fileName: string, idempotencyKey?: string) {
     const ownerUserId = String(this.config.get<string>('BITRIX_DRIVE_OWNER_USER_ID') || '').trim();
     const folderName = String(
       this.config.get<string>('BITRIX_DRIVE_FOLDER_NAME') || 'Termo de Responsabilidade'
@@ -245,26 +248,30 @@ export class BitrixService {
     }
     if (!folderName) throw new Error('BITRIX_DRIVE_FOLDER_NAME nao configurado');
 
-    const storages = await this.call<BitrixDiskStorage[]>('disk.storage.getlist', {
-      filter: { ENTITY_TYPE: 'user', ENTITY_ID: ownerUserId }
-    });
-    const storage = (storages || []).find((item) =>
-      String(item.ENTITY_TYPE).toLowerCase() === 'user'
-      && String(item.ENTITY_ID) === ownerUserId
-    );
-    if (!storage?.ROOT_OBJECT_ID) {
-      throw new Error(`Drive do usuario Bitrix24 ${ownerUserId} nao localizado`);
-    }
-
+    const storage = await this.resolveUserDriveStorage(ownerUserId);
     const folder = await this.ensureDriveFolder(storage.ROOT_OBJECT_ID, folderName);
-    const result = await this.call<BitrixDiskObject>('disk.folder.uploadfile', {
-      id: Number(folder.ID),
-      data: { NAME: fileName },
-      fileContent: [fileName, pdf.toString('base64')],
-      generateUniqueName: true
-    });
+    const archiveFileName = driveArchiveFileName(fileName, idempotencyKey, pdf);
+    const existing = await this.findDriveFile(folder.ID, archiveFileName);
+    if (existing) return { file: existing, folder, storage, alreadyExisted: true };
+
+    let result: BitrixDiskObject;
+    try {
+      result = await this.call<BitrixDiskObject>('disk.folder.uploadfile', {
+        id: Number(folder.ID),
+        data: { NAME: archiveFileName },
+        fileContent: [archiveFileName, pdf.toString('base64')],
+        generateUniqueName: false
+      });
+    } catch (error) {
+      // A requisicao pode ter sido concluida no Bitrix24 mesmo quando a resposta
+      // nao chegou ao FortaDocs. Reconciliar pelo nome deterministico evita um
+      // segundo PDF e transforma esse caso em sucesso idempotente.
+      const uploaded = await this.findDriveFile(folder.ID, archiveFileName);
+      if (uploaded) return { file: uploaded, folder, storage, alreadyExisted: true };
+      throw error;
+    }
     if (!result?.ID) throw new Error('Bitrix24 nao confirmou o arquivo salvo no Drive');
-    return { file: result, folder, storage };
+    return { file: result, folder, storage, alreadyExisted: false };
   }
 
   async ensureRestAppUriPlacement(handler: string) {
@@ -531,8 +538,87 @@ export class BitrixService {
     }
     throw new Error(`Pasta "${folderName}" nao localizada nem criada no Drive`);
   }
+
+  private async resolveUserDriveStorage(ownerUserId: string) {
+    const cached = this.driveStorageCache.get(ownerUserId);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+    const configuredStorageId = String(
+      this.config.get<string>('BITRIX_DRIVE_STORAGE_ID') || ''
+    ).trim();
+    if (configuredStorageId) {
+      const configured = await this.call<BitrixDiskStorage>('disk.storage.get', {
+        id: Number(configuredStorageId)
+      });
+      if (this.isUserDriveStorage(configured, ownerUserId) && configured.ROOT_OBJECT_ID) {
+        this.cacheDriveStorage(ownerUserId, configured);
+        return configured;
+      }
+      throw new Error(
+        `BITRIX_DRIVE_STORAGE_ID ${configuredStorageId} nao pertence ao usuario Bitrix24 ${ownerUserId}`
+      );
+    }
+
+    const filtered = await this.call<BitrixDiskStorage[]>('disk.storage.getlist', {
+      filter: { ENTITY_TYPE: 'user', ENTITY_ID: ownerUserId }
+    });
+    let storage = (filtered || []).find((item) => this.isUserDriveStorage(item, ownerUserId));
+
+    // O filtro do Drive pode ocasionalmente devolver uma lista vazia mesmo que o
+    // armazenamento esteja acessivel. A consulta paginada sem filtro confirma o
+    // estado real antes de exibir uma falha ao operador.
+    for (let start = 0; !storage && start < 500; start += 50) {
+      const page = await this.call<BitrixDiskStorage[]>('disk.storage.getlist', { start });
+      storage = (page || []).find((item) => this.isUserDriveStorage(item, ownerUserId));
+      if (!page || page.length < 50) break;
+    }
+    if (!storage?.ROOT_OBJECT_ID) {
+      throw new Error(
+        `Drive do usuario Bitrix24 ${ownerUserId} ainda nao esta disponivel para o aplicativo`
+      );
+    }
+    this.cacheDriveStorage(ownerUserId, storage);
+    return storage;
+  }
+
+  private isUserDriveStorage(storage: BitrixDiskStorage | undefined, ownerUserId: string) {
+    return Boolean(
+      storage
+      && String(storage.ENTITY_TYPE).toLowerCase() === 'user'
+      && String(storage.ENTITY_ID) === ownerUserId
+    );
+  }
+
+  private cacheDriveStorage(ownerUserId: string, storage: BitrixDiskStorage) {
+    this.driveStorageCache.set(ownerUserId, {
+      expiresAt: Date.now() + this.driveStorageCacheTtlMs,
+      value: storage
+    });
+  }
+
+  private async findDriveFile(folderId: string, fileName: string) {
+    const children = await this.call<BitrixDiskObject[]>('disk.folder.getchildren', {
+      id: Number(folderId),
+      filter: { NAME: fileName }
+    });
+    return (children || []).find((item) =>
+      String(item.TYPE).toLowerCase() === 'file'
+      && item.NAME === fileName
+    );
+  }
 }
 
 function normalizeName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+export function driveArchiveFileName(fileName: string, idempotencyKey?: string, pdf?: Buffer) {
+  const normalized = fileName.toLowerCase().endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+  if (!idempotencyKey) return normalized;
+  const marker = createHash('sha256')
+    .update(idempotencyKey)
+    .update(pdf || Buffer.alloc(0))
+    .digest('hex')
+    .slice(0, 10);
+  return `${normalized.slice(0, -4)}-${marker}.pdf`;
 }

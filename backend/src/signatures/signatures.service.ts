@@ -573,7 +573,8 @@ export class SignaturesService {
       }
       const archived = await this.bitrix.archiveResponsibilityTerm(
         pdf,
-        this.pdfFileName(signature.sendRequest.documentFileName)
+        this.pdfFileName(signature.sendRequest.documentFileName),
+        signature.id
       );
       const now = new Date();
       await this.prisma.$transaction([

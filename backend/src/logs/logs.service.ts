@@ -6,25 +6,20 @@ export class LogsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async activity() {
-    const [auditEvents, requests, signatures, errors] = await Promise.all([
+    const [auditEvents, failedRequests, errors] = await Promise.all([
       this.prisma.auditEvent.findMany({
         orderBy: { createdAt: 'desc' },
-        take: 40,
+        take: 30,
         include: { actor: { select: { name: true } } }
       }),
       this.prisma.sendRequest.findMany({
+        where: { failureReason: { not: null } },
         orderBy: { updatedAt: 'desc' },
-        take: 40,
+        take: 20,
         include: {
           requestedBy: { select: { name: true } },
           employee: { select: { nome: true } }
         }
-      }),
-      this.prisma.signature.findMany({
-        where: { signedAt: { not: null } },
-        orderBy: { signedAt: 'desc' },
-        take: 30,
-        include: { employee: { select: { nome: true } } }
       }),
       this.prisma.integrationLog.findMany({
         where: { error: { not: null } },
@@ -42,30 +37,18 @@ export class LogsService {
         status: 'SUCCESS' as const,
         createdAt: event.createdAt
       })),
-      ...requests.map((request) => ({
+      ...failedRequests.map((request) => ({
         id: `request:${request.id}`,
         actor: request.requestedBy?.name || 'Sistema',
-        action: request.failureReason
-          ? `encontrou uma falha no termo de ${request.employee.nome}`
-          : request.sentAt
-            ? `enviou um termo para ${request.employee.nome}`
-            : `criou um rascunho para ${request.employee.nome}`,
-        context: request.failureReason || request.documentFileName || undefined,
-        status: request.failureReason ? 'ERROR' as const : 'SUCCESS' as const,
-        createdAt: request.sentAt || request.requestedAt
-      })),
-      ...signatures.map((signature) => ({
-        id: `signature:${signature.id}`,
-        actor: signature.employee.nome,
-        action: 'assinou o termo de responsabilidade',
-        context: 'Assinatura do colaborador concluída',
-        status: 'SUCCESS' as const,
-        createdAt: signature.signedAt!
+        action: `não conseguiu concluir o termo de ${request.employee.nome}`,
+        context: request.failureReason || undefined,
+        status: 'ERROR' as const,
+        createdAt: request.updatedAt
       })),
       ...errors.map((log) => ({
         id: `error:${log.id}`,
         actor: 'Sistema',
-        action: `registrou uma falha em ${log.source}`,
+        action: `encontrou uma falha em ${this.sourceName(log.source)}`,
         context: log.error || log.endpoint || undefined,
         status: 'ERROR' as const,
         createdAt: log.createdAt
@@ -74,7 +57,7 @@ export class LogsService {
 
     return activity
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .slice(0, 60);
+      .slice(0, 40);
   }
 
   create(data: {
@@ -124,21 +107,25 @@ export class LogsService {
   }
 
   private toJson(value: unknown) {
-    if (value === undefined) {
-      return undefined;
-    }
+    if (value === undefined) return undefined;
     return JSON.parse(JSON.stringify(value));
   }
 
   private auditAction(action: string, entityType: string) {
     const actions: Record<string, string> = {
-      REPLACE_ASSIGNMENTS: 'atualizou operadores e notificações',
-      UPLOAD: 'adicionou uma nova versão de template',
-      SET_DEFAULT: 'definiu o template padrão',
-      ACTIVATE: 'ativou uma versão de template',
-      DEACTIVATE: 'desativou uma versão de template'
+      REPLACE_ASSIGNMENTS: 'atualizou acessos e notificações',
+      UPLOAD: 'adicionou uma nova versão do modelo',
+      SET_DEFAULT: 'definiu o modelo padrão',
+      ACTIVATE: 'ativou uma versão do modelo',
+      DEACTIVATE: 'desativou uma versão do modelo'
     };
-    return actions[action] || `alterou ${entityType.toLocaleLowerCase('pt-BR').replace(/_/g, ' ')}`;
+    const entities: Record<string, string> = {
+      SEND_REQUEST: 'alterou uma solicitação de termo',
+      RESPONSIBILITY_TERM: 'alterou um termo',
+      DOCUMENT_TEMPLATE: 'alterou o modelo do termo',
+      DOCUMENT_TEMPLATE_VERSION: 'alterou uma versão do modelo'
+    };
+    return actions[action] || entities[entityType] || 'fez uma alteração administrativa';
   }
 
   private auditContext(metadata: unknown) {
@@ -146,5 +133,16 @@ export class LogsService {
     const values = metadata as Record<string, unknown>;
     const candidate = values.name || values.version || values.fileName;
     return typeof candidate === 'string' ? candidate : undefined;
+  }
+
+  private sourceName(source: string) {
+    const sources: Record<string, string> = {
+      bitrix: 'Bitrix24',
+      drive: 'Drive',
+      storage: 'armazenamento',
+      supabase: 'Supabase',
+      libreoffice: 'geração do PDF'
+    };
+    return sources[source.toLocaleLowerCase('pt-BR')] || 'uma integração';
   }
 }

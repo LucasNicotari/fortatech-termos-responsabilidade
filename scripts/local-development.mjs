@@ -134,6 +134,67 @@ async function runEndToEnd(headers, employees) {
   return { requestId: draft.id, signatureId: signature.id, bytes: signedPdf.length, sha256: downloadedSha256 };
 }
 
+async function runFiveTermSend(headers, employees) {
+  const selected = employees.filter((item) => item.EMAIL && item.DEPARTMENT_NAME).slice(0, 5);
+  if (selected.length !== 5) throw new Error('Sao necessarios 5 colaboradores sinteticos para validar o envio conjunto');
+  const createdIds = [];
+  const signatureTokens = new Set();
+  try {
+    for (const [index, employee] of selected.entries()) {
+      const draft = await request('/send-requests', {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          employeeBitrixUserId: Number(employee.ID),
+          employeeEmail: employee.EMAIL,
+          employeeName: [employee.NAME, employee.LAST_NAME].filter(Boolean).join(' '),
+          cpf: validCpf(100_000_000 + index),
+          departamento: employee.DEPARTMENT_NAME,
+          equipment: [{
+            quantity: 1,
+            description: `Notebook do envio conjunto ${index + 1}`,
+            serialNumber: `MULTI-${Date.now()}-${index + 1}`,
+            assetTag: `HML-MULTI-00${index + 1}`
+          }]
+        })
+      });
+      createdIds.push(draft.id);
+      const preview = await request(`/send-requests/${draft.id}/preview`, {
+        method: 'POST', headers, body: '{}'
+      });
+      if (!preview.previewUrl) throw new Error(`O termo ${index + 1} nao gerou previa`);
+      const sent = await request(`/send-requests/${draft.id}/send`, {
+        method: 'POST', headers, body: '{}'
+      });
+      const signature = sent.signatures?.[0];
+      if (sent.status !== 'SENT' || !signature?.providerDocumentId) {
+        throw new Error(`O termo ${index + 1} nao foi enviado de forma independente`);
+      }
+      signatureTokens.add(signature.providerDocumentId);
+    }
+    if (signatureTokens.size !== 5) {
+      throw new Error('O envio conjunto reutilizou indevidamente uma assinatura entre colaboradores');
+    }
+    return { sent: createdIds.length, independentSignatures: signatureTokens.size };
+  } finally {
+    for (const id of createdIds) {
+      await request(`/send-requests/${id}`, { method: 'DELETE', headers });
+    }
+  }
+}
+
+function validCpf(base) {
+  const digits = String(base).padStart(9, '0').slice(-9).split('').map(Number);
+  const checkDigit = (values) => {
+    const sum = values.reduce((total, value, index) => total + value * (values.length + 1 - index), 0);
+    const result = (sum * 10) % 11;
+    return result === 10 ? 0 : result;
+  };
+  digits.push(checkDigit(digits));
+  digits.push(checkDigit(digits));
+  const value = digits.join('');
+  return `${value.slice(0, 3)}.${value.slice(3, 6)}.${value.slice(6, 9)}-${value.slice(9)}`;
+}
+
 async function main() {
   console.log('[local] Iniciando banco, backend e frontend locais...');
   const buildArgs = process.argv.includes('--build') ? ['--build'] : [];
@@ -163,9 +224,12 @@ async function main() {
   }
 
   let endToEnd;
+  let fiveTermSend;
   if (process.argv.includes('--check')) {
     console.log('[local] Executando termo, previa, envio, assinatura e download sinteticos...');
     endToEnd = await runEndToEnd(headers, employees);
+    console.log('[local] Executando envio conjunto de 5 termos independentes...');
+    fiveTermSend = await runFiveTermSend(headers, employees);
   }
 
   console.log('');
@@ -177,6 +241,9 @@ async function main() {
   console.log('[local] Nenhum e-mail ou notificacao real sera enviado.');
   if (endToEnd) {
     console.log(`[local] Ponta a ponta aprovado: ${endToEnd.bytes} bytes, SHA-256 ${endToEnd.sha256}`);
+  }
+  if (fiveTermSend) {
+    console.log(`[local] Envio conjunto aprovado: ${fiveTermSend.sent} termos e ${fiveTermSend.independentSignatures} assinaturas independentes`);
   }
   console.log('[local] Para encerrar: npm.cmd run local:down');
 }

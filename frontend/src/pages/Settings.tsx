@@ -1,21 +1,18 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import type { ReactNode, UIEvent } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, FilePenLine, FileText, History, Save, Search, Settings2, ShieldCheck, UserCheck } from 'lucide-react';
+import { FileText, History, Plus, Search, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { UserAvatar } from '../components/UserAvatar';
+import { api, apiErrorMessage } from '../services/api';
 
 type UserRole = 'ADMIN' | 'RH' | 'TI';
+type AccessLevel = 'ADMIN' | 'OPERATOR' | 'VIEWER';
+type PickerMode = 'access' | 'notification';
 
 interface WorkflowUser {
   bitrixUserId: number;
   name: string;
-  email: string;
-  workPosition: string;
-  departmentName: string;
-  photoUrl?: string;
   active: boolean;
   hasAccess: boolean;
   role: UserRole;
@@ -27,9 +24,9 @@ const TemplatesTab = lazy(() => import('./Templates').then((module) => ({ defaul
 const LogsTab = lazy(() => import('./Logs').then((module) => ({ default: module.Logs })));
 
 const settingsTabs = [
-  { id: 'access', label: 'Usuários e acessos', icon: Settings2 },
-  { id: 'templates', label: 'Templates', icon: FileText },
-  { id: 'activity', label: 'Atividades', icon: History }
+  { id: 'access', label: 'Acessos', icon: ShieldCheck },
+  { id: 'templates', label: 'Modelo do termo', icon: FileText },
+  { id: 'activity', label: 'Logs', icon: History }
 ];
 
 export function Settings() {
@@ -43,11 +40,23 @@ export function Settings() {
   }
 
   return (
-    <section className="mx-auto max-w-[1600px]">
-      <header className="mb-5"><h1 className="text-2xl font-bold tracking-tight text-ink">Configurações</h1><p className="mt-1 text-sm text-steel">Centralize usuários, documentos e auditoria do FortaDocs.</p></header>
-      <nav className="mb-5 flex gap-1 overflow-x-auto rounded border border-b24-border bg-surface p-1.5" aria-label="Seções das configurações">
+    <section className="mx-auto w-full min-w-0 max-w-[calc(100vw-24px)] sm:max-w-5xl">
+      <header className="mb-5">
+        <h1 className="text-2xl font-bold text-ink">Configurações</h1>
+        <p className="mt-1 text-sm text-steel">Acessos, documento e registros do FortaDocs.</p>
+      </header>
+      <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-b24-border" aria-label="Seções das configurações">
         {settingsTabs.map((tab) => (
-          <button key={tab.id} onClick={() => setSearchParams(tab.id === 'access' ? {} : { tab: tab.id })} aria-current={activeTab === tab.id ? 'page' : undefined} className={`focus-ring flex shrink-0 items-center gap-2 rounded px-3 py-2 text-sm font-medium transition ${activeTab === tab.id ? 'bg-sky-50 text-b24-blue-dark' : 'text-steel hover:bg-b24-bg hover:text-ink'}`}>
+          <button
+            key={tab.id}
+            onClick={() => setSearchParams(tab.id === 'access' ? {} : { tab: tab.id })}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
+            className={`focus-ring flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
+              activeTab === tab.id
+                ? 'border-b24-blue text-b24-blue-dark'
+                : 'border-transparent text-steel hover:text-ink'
+            }`}
+          >
             <tab.icon size={16} /> {tab.label}
           </button>
         ))}
@@ -65,118 +74,287 @@ function AccessSettings() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [assignments, setAssignments] = useState<WorkflowUser[]>([]);
-  const [search, setSearch] = useState('');
-  const [visibleCount, setVisibleCount] = useState(10);
+  const [pickerMode, setPickerMode] = useState<PickerMode | null>(null);
+  const [message, setMessage] = useState('');
   const workflowQuery = useQuery({
     queryKey: ['term-workflow'],
     queryFn: async () => (await api.get<WorkflowUser[]>('/term-workflow')).data
   });
 
-  useEffect(() => { if (workflowQuery.data) setAssignments(workflowQuery.data); }, [workflowQuery.data]);
-  const filteredAssignments = useMemo(() => {
-    const normalized = normalizeSearch(search);
-    const active = assignments.filter((item) => item.active);
-    return normalized
-      ? active.filter((item) => normalizeSearch(`${item.name} ${item.email} ${item.workPosition} ${item.departmentName} ${item.bitrixUserId}`).includes(normalized))
-      : active;
-  }, [assignments, search]);
-  const visibleAssignments = filteredAssignments.slice(0, visibleCount);
-  useEffect(() => { setVisibleCount(10); }, [search, assignments.length]);
+  useEffect(() => {
+    if (workflowQuery.data) setAssignments(workflowQuery.data);
+  }, [workflowQuery.data]);
 
   const save = useMutation({
-    mutationFn: () => api.put<WorkflowUser[]>('/term-workflow', {
-      assignments: assignments.map(({ bitrixUserId, hasAccess, role, canOperate, receiveNotifications }) => ({ bitrixUserId, hasAccess, role, canOperate, receiveNotifications }))
+    mutationFn: (next: WorkflowUser[]) => api.put<WorkflowUser[]>('/term-workflow', {
+      assignments: next.map(({ bitrixUserId, hasAccess, role, canOperate, receiveNotifications }) => ({
+        bitrixUserId, hasAccess, role, canOperate, receiveNotifications
+      }))
     }),
+    onMutate: (next) => {
+      const previous = assignments;
+      setAssignments(next);
+      setMessage('');
+      return { previous };
+    },
     onSuccess: ({ data }) => {
       setAssignments(data);
       queryClient.setQueryData(['term-workflow'], data);
+      setMessage('Alteração salva.');
+    },
+    onError: (error, _next, context) => {
+      if (context?.previous) setAssignments(context.previous);
+      setMessage(apiErrorMessage(error, 'Não foi possível salvar a alteração.'));
     }
   });
 
-  function patchUser(bitrixUserId: number, patch: Partial<WorkflowUser>) {
-    setAssignments((items) => items.map((item) => item.bitrixUserId === bitrixUserId ? { ...item, ...patch } : item));
-    save.reset();
+  const accessMembers = assignments.filter((item) => item.hasAccess);
+  const notificationMembers = assignments.filter((item) => item.receiveNotifications);
+  const operatorCount = accessMembers.filter((item) => item.canOperate).length;
+
+  function persist(next: WorkflowUser[]) {
+    if (!save.isPending) save.mutate(next);
   }
 
-  function toggleAccess(item: WorkflowUser) {
-    const hasAccess = !item.hasAccess;
-    patchUser(item.bitrixUserId, { hasAccess, canOperate: hasAccess ? item.canOperate : false });
+  function updateMember(bitrixUserId: number, patch: Partial<WorkflowUser>) {
+    persist(assignments.map((item) => item.bitrixUserId === bitrixUserId ? { ...item, ...patch } : item));
   }
 
-  function toggleOperate(item: WorkflowUser) {
-    const canOperate = !item.canOperate;
-    patchUser(item.bitrixUserId, { canOperate, hasAccess: canOperate ? true : item.hasAccess });
+  function changeLevel(item: WorkflowUser, level: AccessLevel) {
+    const patch = level === 'ADMIN'
+      ? { role: 'ADMIN' as const, hasAccess: true, canOperate: true }
+      : level === 'OPERATOR'
+        ? { role: 'TI' as const, hasAccess: true, canOperate: true }
+        : { role: 'RH' as const, hasAccess: true, canOperate: false };
+    updateMember(item.bitrixUserId, patch);
   }
 
-  function loadNextPage(event: UIEvent<HTMLDivElement>) {
-    const target = event.currentTarget;
-    if (target.scrollHeight - target.scrollTop - target.clientHeight < 48) {
-      setVisibleCount((current) => Math.min(current + 10, filteredAssignments.length));
-    }
+  function removeAccess(item: WorkflowUser) {
+    if (item.canOperate && operatorCount <= 1) return;
+    const next = item.receiveNotifications
+      ? assignments.map((entry) => entry.bitrixUserId === item.bitrixUserId
+        ? { ...entry, hasAccess: false, canOperate: false, role: 'RH' as const }
+        : entry)
+      : assignments.filter((entry) => entry.bitrixUserId !== item.bitrixUserId);
+    persist(next);
+  }
+
+  function removeNotification(item: WorkflowUser) {
+    const next = item.hasAccess
+      ? assignments.map((entry) => entry.bitrixUserId === item.bitrixUserId
+        ? { ...entry, receiveNotifications: false }
+        : entry)
+      : assignments.filter((entry) => entry.bitrixUserId !== item.bitrixUserId);
+    persist(next);
+  }
+
+  function addCandidate(candidate: WorkflowUser) {
+    const existing = assignments.find((item) => item.bitrixUserId === candidate.bitrixUserId);
+    const next = existing
+      ? assignments.map((item) => item.bitrixUserId !== candidate.bitrixUserId
+        ? item
+        : pickerMode === 'access'
+          ? { ...item, hasAccess: true, canOperate: true, role: 'TI' as const }
+          : { ...item, receiveNotifications: true })
+      : [...assignments, {
+          ...candidate,
+          hasAccess: pickerMode === 'access',
+          canOperate: pickerMode === 'access',
+          role: pickerMode === 'access' ? 'TI' as const : 'RH' as const,
+          receiveNotifications: pickerMode === 'notification'
+        }];
+    setPickerMode(null);
+    persist(next);
+  }
+
+  if (workflowQuery.isLoading) return <AccessSkeleton />;
+  if (workflowQuery.isError) {
+    return (
+      <div className="rounded border border-red-200 bg-red-50 px-4 py-4">
+        <p className="text-sm font-medium text-red-800">Não foi possível carregar os acessos.</p>
+        <button
+          type="button"
+          onClick={() => workflowQuery.refetch()}
+          className="focus-ring mt-3 rounded bg-white px-3 py-2 text-sm font-semibold text-red-800 shadow-sm hover:bg-red-100"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
   }
 
   return (
-    <div className="grid gap-4">
-      <section className="flex items-center gap-3 rounded border border-b24-border bg-surface px-4 py-3.5 sm:px-5">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600"><ShieldCheck size={17} /></span>
-        <div className="min-w-0">
-          <h2 className="font-semibold text-ink">Assinatura interna FortaDocs</h2>
-          <p className="text-xs text-steel">O colaborador recebe o link pessoal no chat e assina dentro do Bitrix24. Não existe assinatura obrigatória do representante.</p>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded border border-b24-border bg-surface">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-b24-border px-4 py-3.5 sm:px-5">
-          <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-50 text-b24-blue-dark"><UserCheck size={17} /></span><div className="min-w-0"><h2 className="font-semibold text-ink">Usuários do Bitrix24</h2><p className="truncate text-xs text-steel">Controle acesso, perfil, operação e a seleção inicial de notificações.</p></div></div>
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-b24-border px-3 py-2 sm:max-w-80"><Search size={16} className="shrink-0 text-steel" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, cargo, setor ou ID" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label>
-        </div>
-
-        <div className="hidden grid-cols-[minmax(200px,1fr)_110px_110px_115px_130px] items-stretch gap-2 border-b border-b24-border bg-b24-bg/60 px-5 py-2 text-xs font-semibold text-steel lg:grid">
-          <span className="flex min-h-10 items-center">Usuário</span>
-          <ColumnTitle>Acessar o FortaDocs</ColumnTitle>
-          <ColumnTitle>Perfil e Setor</ColumnTitle>
-          <ColumnTitle>Gerenciar Termos</ColumnTitle>
-          <ColumnTitle>Notificações padrão</ColumnTitle>
-        </div>
-        <div onScroll={loadNextPage} className="max-h-[480px] divide-y divide-b24-border/80 overflow-y-auto">
-          {workflowQuery.isLoading ? <AccessSkeleton /> : visibleAssignments.map((item) => {
-            const isCurrentUser = String(user?.bitrixUserId || '') === String(item.bitrixUserId);
+    <div className="space-y-7">
+      <SettingsSection
+        title="Pessoas com acesso"
+        description="Somente estas pessoas podem abrir e administrar o FortaDocs."
+        action={<AddButton disabled={save.isPending} onClick={() => setPickerMode('access')}>Adicionar pessoa</AddButton>}
+      >
+        <div className="divide-y divide-b24-border">
+          {accessMembers.map((item) => {
+            const current = String(user?.bitrixUserId || '') === String(item.bitrixUserId);
+            const level = accessLevel(item);
+            const lastOperator = item.canOperate && operatorCount <= 1;
             return (
-              <div key={item.bitrixUserId} className="grid gap-3 px-4 py-3 transition hover:bg-sky-50/40 lg:grid-cols-[minmax(200px,1fr)_110px_110px_115px_130px] lg:items-center lg:gap-2 lg:px-5">
-                <div className="flex min-w-0 items-center gap-3"><UserAvatar name={item.name} photoUrl={item.photoUrl} /><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{item.name}</p><p className="truncate text-xs text-steel">{item.workPosition || 'Cargo não informado'}{item.departmentName ? ` · ${item.departmentName}` : ''}</p><p className="truncate text-[11px] text-zinc-400">{item.email || 'Sem e-mail'} · ID {item.bitrixUserId}</p></div></div>
-                <CheckField label="Acessar o FortaDocs" checked={item.hasAccess} disabled={isCurrentUser} onChange={() => toggleAccess(item)} />
-                <label className="flex items-center justify-between gap-2 text-xs text-steel lg:justify-center"><span className="lg:hidden">Perfil e Setor</span><select value={item.role} disabled={!item.hasAccess || isCurrentUser} onChange={(event) => patchUser(item.bitrixUserId, { role: event.target.value as UserRole })} className="focus-ring w-24 rounded border border-b24-border bg-surface px-2 py-1.5 text-xs text-ink disabled:bg-zinc-100 disabled:text-zinc-400"><option value="RH">RH</option><option value="TI">TI</option><option value="ADMIN">Admin</option></select></label>
-                <CheckField icon={<FilePenLine size={15} />} label="Gerenciar Termos" checked={item.canOperate} onChange={() => toggleOperate(item)} />
-                <CheckField icon={<Bell size={15} />} label="Notificações padrão" checked={item.receiveNotifications} onChange={() => patchUser(item.bitrixUserId, { receiveNotifications: !item.receiveNotifications })} />
+              <div key={item.bitrixUserId} className="relative w-full min-w-0 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_128px_36px] sm:items-center sm:gap-2 sm:px-5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
+                </div>
+                <select
+                  aria-label={`Nível de acesso de ${item.name}`}
+                  value={level}
+                  disabled={save.isPending || current}
+                  onChange={(event) => changeLevel(item, event.target.value as AccessLevel)}
+                  className="focus-ring ml-11 mt-2 w-[calc(100%-44px)] min-w-0 rounded border border-b24-border bg-surface px-2 py-2 text-sm text-ink disabled:bg-zinc-100 sm:ml-0 sm:mt-0 sm:w-full sm:px-2.5"
+                >
+                  <option value="ADMIN">Administrador</option>
+                  <option value="OPERATOR">Operador</option>
+                  <option value="VIEWER" disabled={lastOperator}>Somente consulta</option>
+                </select>
+                <button
+                  type="button"
+                  title={current ? 'Seu acesso não pode ser removido' : lastOperator ? 'Mantenha ao menos um operador' : 'Remover acesso'}
+                  aria-label={`Remover acesso de ${item.name}`}
+                  disabled={save.isPending || current || lastOperator}
+                  onClick={() => removeAccess(item)}
+                  className="focus-ring absolute bottom-3 left-4 grid h-9 w-9 place-items-center rounded text-steel hover:bg-red-50 hover:text-coral disabled:opacity-30 sm:static"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             );
           })}
-          {!workflowQuery.isLoading && visibleAssignments.length === 0 && <p className="px-5 py-10 text-center text-sm text-steel">Nenhum usuário encontrado.</p>}
-          {visibleAssignments.length < filteredAssignments.length && <p className="px-3 py-2 text-center text-xs text-zinc-400">Role para carregar mais 10</p>}
+          {!accessMembers.length && <EmptyState>Nenhuma pessoa com acesso.</EmptyState>}
         </div>
-        <div className="flex flex-wrap items-center gap-3 border-t border-b24-border bg-b24-bg/40 px-4 py-3 sm:px-5">
-          <button disabled={save.isPending || !assignments.some((item) => item.canOperate)} onClick={() => save.mutate()} className="focus-ring inline-flex items-center gap-2 rounded bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50"><Save size={16} /> {save.isPending ? 'Salvando...' : 'Salvar alterações'}</button>
-          <span className="text-xs text-steel">{filteredAssignments.length} usuários ativos</span>
-          {save.isSuccess && <p role="status" className="text-sm font-medium text-emerald-700">Configurações atualizadas.</p>}
-          {save.isError && <p role="alert" className="text-sm font-medium text-coral">Não foi possível salvar as configurações.</p>}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Notificações padrão"
+        description="Sugestão inicial de pessoas notificadas em cada novo termo."
+        action={<AddButton disabled={save.isPending} onClick={() => setPickerMode('notification')}>Adicionar pessoa</AddButton>}
+      >
+        <div className="divide-y divide-b24-border">
+          {notificationMembers.map((item) => (
+            <div key={item.bitrixUserId} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
+              </div>
+              <button
+                type="button"
+                title="Remover das notificações"
+                aria-label={`Remover ${item.name} das notificações`}
+                disabled={save.isPending}
+                onClick={() => removeNotification(item)}
+                className="focus-ring grid h-9 w-9 place-items-center rounded text-steel hover:bg-zinc-100 hover:text-ink disabled:opacity-30"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+          {!notificationMembers.length && <EmptyState>Nenhuma notificação padrão.</EmptyState>}
         </div>
-      </section>
+      </SettingsSection>
+
+      {message && <p role="status" className={`text-sm ${save.isError ? 'text-coral' : 'text-emerald-700'}`}>{message}</p>}
+      {pickerMode && (
+        <PeoplePicker
+          mode={pickerMode}
+          assignedIds={new Set(assignments.filter((item) =>
+            pickerMode === 'access' ? item.hasAccess : item.receiveNotifications
+          ).map((item) => item.bitrixUserId))}
+          onSelect={addCandidate}
+          onClose={() => setPickerMode(null)}
+        />
+      )}
     </div>
   );
 }
 
-function ColumnTitle({ children }: { children: ReactNode }) {
-  return <span className="flex min-h-10 items-center justify-center px-1 text-center leading-4">{children}</span>;
+function PeoplePicker({ mode, assignedIds, onSelect, onClose }: {
+  mode: PickerMode;
+  assignedIds: Set<number>;
+  onSelect: (candidate: WorkflowUser) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  const candidatesQuery = useQuery({
+    queryKey: ['term-workflow-candidates', debouncedSearch],
+    queryFn: async () => (await api.get<WorkflowUser[]>('/term-workflow/candidates', {
+      params: { search: debouncedSearch || undefined }
+    })).data
+  });
+  const candidates = (candidatesQuery.data || []).filter((item) => !assignedIds.has(item.bitrixUserId));
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label="Adicionar pessoa">
+      <div className="w-full max-w-lg overflow-hidden rounded-lg border border-b24-border bg-surface shadow-xl">
+        <div className="flex items-center justify-between border-b border-b24-border px-4 py-3">
+          <div>
+            <h2 className="font-semibold text-ink">Adicionar pessoa</h2>
+            <p className="text-xs text-steel">{mode === 'access' ? 'Conceder acesso ao FortaDocs' : 'Adicionar às notificações padrão'}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="focus-ring grid h-8 w-8 place-items-center rounded text-steel hover:bg-zinc-100"><X size={17} /></button>
+        </div>
+        <div className="p-4">
+          <label className="flex items-center gap-2 rounded border border-b24-border px-3 py-2.5">
+            <Search size={17} className="text-steel" />
+            <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome, e-mail ou departamento" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+          </label>
+        </div>
+        <div className="max-h-80 divide-y divide-b24-border overflow-y-auto border-t border-b24-border">
+          {candidatesQuery.isLoading ? <p className="px-4 py-8 text-center text-sm text-steel">Buscando pessoas...</p> : candidates.map((candidate) => (
+            <button key={candidate.bitrixUserId} type="button" onClick={() => onSelect(candidate)} className="focus-ring flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-sky-50">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-ink">{candidate.name}</span>
+              </span>
+              <Plus size={17} className="text-b24-blue-dark" />
+            </button>
+          ))}
+          {!candidatesQuery.isLoading && !candidates.length && <p className="px-4 py-8 text-center text-sm text-steel">Nenhuma pessoa encontrada.</p>}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function CheckField({ icon, label, checked, disabled = false, onChange }: { icon?: ReactNode; label: string; checked: boolean; disabled?: boolean; onChange: () => void }) {
-  return <label className="flex cursor-pointer items-center justify-between gap-2 text-xs text-steel lg:justify-center"><span className="flex items-center gap-1.5 lg:hidden">{icon}{label}</span><input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} className="h-4 w-4 accent-b24-blue disabled:opacity-50" /></label>;
+function SettingsSection({ title, description, action, children }: {
+  title: string;
+  description: string;
+  action: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="w-full min-w-0 overflow-hidden rounded border border-b24-border bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-b24-border px-4 py-3.5 sm:px-5">
+        <div>
+          <h2 className="font-semibold text-ink">{title}</h2>
+          <p className="mt-0.5 text-xs text-steel">{description}</p>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
 }
 
-function normalizeSearch(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
+function AddButton({ disabled, onClick, children }: { disabled?: boolean; onClick: () => void; children: ReactNode }) {
+  return <button type="button" disabled={disabled} onClick={onClick} className="focus-ring inline-flex items-center gap-2 rounded bg-b24-blue px-3 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:cursor-not-allowed disabled:opacity-50"><Plus size={16} />{children}</button>;
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return <p className="px-5 py-7 text-center text-sm text-steel">{children}</p>;
+}
+
+function accessLevel(item: WorkflowUser): AccessLevel {
+  if (item.role === 'ADMIN') return 'ADMIN';
+  return item.canOperate ? 'OPERATOR' : 'VIEWER';
 }
 
 function AccessSkeleton() {
-  return <>{Array.from({ length: 6 }).map((_, index) => <div key={index} className="flex h-[68px] animate-pulse items-center gap-3 px-5"><span className="h-10 w-10 rounded-full bg-zinc-200" /><span className="h-4 w-1/4 rounded bg-zinc-200" /><span className="ml-auto h-4 w-1/4 rounded bg-zinc-100" /></div>)}</>;
+  return <div className="space-y-5">{Array.from({ length: 2 }).map((_, index) => <div key={index} className="h-48 animate-pulse rounded border border-b24-border bg-surface" />)}</div>;
 }

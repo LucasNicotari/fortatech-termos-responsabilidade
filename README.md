@@ -32,7 +32,8 @@ assina.
 - Docxtemplater e LibreOffice headless para DOCX e PDF.
 - Chat, OAuth, `REST_APP_URI` e Drive do Bitrix24 para convite, identidade, assinatura e arquivo final.
 - Supabase Storage privado para templates, prévias e documentos concluídos.
-- Docker Compose para desenvolvimento e Render para HTTPS público.
+- Docker Compose para desenvolvimento e implantação persistente com Traefik; Render permanece
+  como ambiente de homologação/retorno.
 
 Bitrix Sign B2E e ZapSign permanecem apenas como compatibilidade histórica/alternativa
 desativada. Novos termos usam o provedor interno `FORTADOCS`.
@@ -44,7 +45,7 @@ desativada. Novos termos usam o provedor interno `FORTADOCS`.
 - Remoção lógica em lote por caixas de seleção; PDFs, hashes e auditoria são preservados.
 - Cache curto do diretório Bitrix24, timeout HTTP e concorrência limitada para sincronização e
   conversão PDF.
-- Baseline desta revisão: 14 suítes e 77 testes automatizados.
+- Baseline desta revisão: 16 suítes e 82 testes automatizados.
 
 ## Desenvolvimento local
 
@@ -111,5 +112,7 @@ npm.cmd run test:local
 - [Segurança e operação](docs/security-operations.md)
 - [Revisão jurídica](docs/legal-review-checklist.md)
 - [Otimização das imagens Docker](docs/docker-optimization-report.md)
+- [Processo de revisão de produto e produção](docs/production-readiness-review.md)
+- [Implantação permanente com Docker e Traefik](docs/container-production.md)
 
 O ambiente atual é de homologação. O documento operacional preserva o Word original, não exibe faixa de homologação e centraliza os dois títulos principais. Produção ainda exige aprovação jurídica, segredos e projetos separados e hospedagem de backend que não suspenda por inatividade.

@@ -89,6 +89,21 @@ export class AuthService {
     return this.session(launchCode.user!);
   }
 
+  async currentSession(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.active) {
+      throw new UnauthorizedException('Usuario nao autorizado');
+    }
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      bitrixUserId: user.bitrixUserId,
+      canOperate: await this.workflow.canOperate(user.bitrixUserId || undefined)
+    };
+  }
+
   private async session(user: { id: string; name: string; email: string; role: UserRole; bitrixUserId: string | null }) {
     const canOperate = await this.workflow.canOperate(user.bitrixUserId || undefined);
     const accessToken = await this.jwt.signAsync(

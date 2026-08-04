@@ -145,7 +145,7 @@ Use uma conta Bitrix24 controlada que possa receber a mensagem e assinar.
 - commit e deploy identificados;
 - `/health` e frontend em HTTP 200;
 - 13 migrations aplicadas e 18 tabelas `app_*` conferidas;
-- baseline desta revisão: 14 suítes e 77 testes automatizados aprovados;
+- baseline desta revisão: 16 suítes e 82 testes automatizados aprovados;
 - lint e builds aprovados;
 - escopos `basic`, `user`, `user_basic`, `department`, `im`, `placement` e `disk` validados;
 - envio ao chat e abertura `REST_APP_URI` comprovados;

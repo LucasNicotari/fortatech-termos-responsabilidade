@@ -1,4 +1,4 @@
-import { BitrixService } from './bitrix.service';
+import { BitrixService, driveArchiveFileName } from './bitrix.service';
 import { of } from 'rxjs';
 
 describe('BitrixService sign.b2e', () => {
@@ -160,6 +160,7 @@ describe('BitrixService sign.b2e', () => {
       .mockResolvedValueOnce([{
         ID: '200', NAME: 'Termo de Responsabilidade', STORAGE_ID: '55', TYPE: 'folder'
       }])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce({
         ID: '300', NAME: 'TR.Lucas_Nicotari.pdf', STORAGE_ID: '55', TYPE: 'file',
         PARENT_ID: '200', DETAIL_URL: 'https://company.bitrix24.com.br/disk/file/300'
@@ -177,13 +178,75 @@ describe('BitrixService sign.b2e', () => {
       id: 100,
       filter: { NAME: 'Termo de Responsabilidade' }
     });
-    expect(call).toHaveBeenNthCalledWith(3, 'disk.folder.uploadfile', {
+    expect(call).toHaveBeenNthCalledWith(3, 'disk.folder.getchildren', {
+      id: 200,
+      filter: { NAME: 'TR.Lucas_Nicotari.pdf' }
+    });
+    expect(call).toHaveBeenNthCalledWith(4, 'disk.folder.uploadfile', {
       id: 200,
       data: { NAME: 'TR.Lucas_Nicotari.pdf' },
       fileContent: ['TR.Lucas_Nicotari.pdf', Buffer.from('%PDF-test').toString('base64')],
-      generateUniqueName: true
+      generateUniqueName: false
     });
     expect(archived.file.ID).toBe('300');
+    expect(archived.alreadyExisted).toBe(false);
+  });
+
+  it('finds the user Drive through the paginated fallback when the filtered list is empty', async () => {
+    const config = { get: (key: string) => key === 'BITRIX_DRIVE_OWNER_USER_ID' ? '8465' : undefined };
+    const service = new BitrixService({} as never, config as never, {} as never, {} as never, {} as never);
+    const call = jest.spyOn(service, 'call')
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        ID: '55', NAME: 'Lucas', ENTITY_TYPE: 'user', ENTITY_ID: '8465', ROOT_OBJECT_ID: '100'
+      }])
+      .mockResolvedValueOnce([{
+        ID: '200', NAME: 'Termo de Responsabilidade', STORAGE_ID: '55', TYPE: 'folder'
+      }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({
+        ID: '300', NAME: 'TR.Lucas.pdf', STORAGE_ID: '55', TYPE: 'file'
+      });
+
+    await expect(service.archiveResponsibilityTerm(Buffer.from('%PDF-test'), 'TR.Lucas.pdf'))
+      .resolves.toEqual(expect.objectContaining({ file: expect.objectContaining({ ID: '300' }) }));
+
+    expect(call).toHaveBeenNthCalledWith(1, 'disk.storage.getlist', {
+      filter: { ENTITY_TYPE: 'user', ENTITY_ID: '8465' }
+    });
+    expect(call).toHaveBeenNthCalledWith(2, 'disk.storage.getlist', { start: 0 });
+  });
+
+  it('reconciles an ambiguous upload response without creating a duplicate PDF', async () => {
+    const config = { get: (key: string) => key === 'BITRIX_DRIVE_OWNER_USER_ID' ? '8465' : undefined };
+    const service = new BitrixService({} as never, config as never, {} as never, {} as never, {} as never);
+    const pdf = Buffer.from('%PDF-test');
+    const archiveName = driveArchiveFileName('TR.Lucas.pdf', 'signature-1', pdf);
+    const call = jest.spyOn(service, 'call')
+      .mockResolvedValueOnce([{
+        ID: '55', NAME: 'Lucas', ENTITY_TYPE: 'user', ENTITY_ID: '8465', ROOT_OBJECT_ID: '100'
+      }])
+      .mockResolvedValueOnce([{
+        ID: '200', NAME: 'Termo de Responsabilidade', STORAGE_ID: '55', TYPE: 'folder'
+      }])
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce([{
+        ID: '300', NAME: archiveName, STORAGE_ID: '55', TYPE: 'file', DETAIL_URL: 'https://drive/300'
+      }]);
+
+    const result = await service.archiveResponsibilityTerm(pdf, 'TR.Lucas.pdf', 'signature-1');
+
+    expect(result.file.ID).toBe('300');
+    expect(result.alreadyExisted).toBe(true);
+    expect(call).toHaveBeenCalledWith('disk.folder.uploadfile', expect.objectContaining({
+      data: { NAME: archiveName },
+      generateUniqueName: false
+    }));
+    expect(call).toHaveBeenLastCalledWith('disk.folder.getchildren', {
+      id: 200,
+      filter: { NAME: archiveName }
+    });
   });
 
   it('redacts Drive file contents from integration logs', async () => {

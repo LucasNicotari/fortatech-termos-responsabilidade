@@ -9,6 +9,7 @@ import { json, NextFunction, Request, Response, urlencoded } from 'express';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
+  app.enableShutdownHooks();
   app.use(json({ limit: '1.5mb' }));
   app.use(urlencoded({ extended: true, limit: '256kb' }));
 
@@ -35,14 +36,18 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Fortatech Termos API')
-    .setDescription('API para orquestrar Termos de Responsabilidade via Bitrix24')
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  const apiDocsEnabled = config.get<string>('ENABLE_API_DOCS') === 'true'
+    || config.get<string>('NODE_ENV') !== 'production';
+  if (apiDocsEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Fortatech Termos API')
+      .setDescription('API para orquestrar Termos de Responsabilidade via Bitrix24')
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   const port = Number(config.get<string>('PORT') || config.get<string>('BACKEND_PORT') || 3000);
   await app.listen(port, '0.0.0.0');

@@ -77,7 +77,7 @@ export class BitrixIntegrationsController {
     return this.integrations.handleEvent(body);
   }
 
-  @Get('bitrix/term-employees')
+  @Get(['bitrix/employees', 'bitrix/term-employees'])
   @UseGuards(JwtAuthGuard)
   termEmployees() {
     return this.bitrix.listEmployeesWithDepartments();

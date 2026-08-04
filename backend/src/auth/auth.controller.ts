@@ -22,7 +22,7 @@ export class AuthController {
   @Get('me')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  me(@CurrentUser() user: unknown) {
-    return user;
+  me(@CurrentUser() user: { id: string }) {
+    return this.auth.currentSession(user.id);
   }
 }

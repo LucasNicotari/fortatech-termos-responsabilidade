@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Put, Query, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -26,6 +26,13 @@ export class WorkflowController {
   @Roles(UserRole.ADMIN)
   matrix() {
     return this.workflow.matrix();
+  }
+
+  @Get('candidates')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  candidates(@Query('search') search = '') {
+    return this.workflow.candidates(search);
   }
 
   @Put()

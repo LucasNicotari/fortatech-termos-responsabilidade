@@ -39,6 +39,7 @@ services:
       LOCAL_STORAGE_PATH: /app/storage-data
       PUBLIC_BACKEND_URL: ${PUBLIC_BACKEND_URL:-http://localhost:3000}
       LOCAL_DEVELOPMENT_MODE: "true"
+      ENABLE_API_DOCS: "true"
     volumes:
       - local_storage_data:/app/storage-data
   frontend:

@@ -14,6 +14,11 @@
     "local:disk": "docker system df",
     "local:clean-cache": "node scripts/clean-local-cache.mjs",
     "local:clean-cache:all": "node scripts/clean-local-cache.mjs --all",
+    "prod:config": "docker compose --env-file .env.production -f docker-compose.production.yml config --quiet",
+    "prod:build": "docker compose --env-file .env.production -f docker-compose.production.yml build --pull",
+    "prod:up": "docker compose --env-file .env.production -f docker-compose.production.yml up -d --wait",
+    "prod:status": "docker compose --env-file .env.production -f docker-compose.production.yml ps",
+    "prod:logs": "docker compose --env-file .env.production -f docker-compose.production.yml logs -f --tail=200",
     "test:tunnel": "node scripts/cloudflare-tunnel.mjs",
     "test:tunnel:check": "node scripts/cloudflare-tunnel.mjs --check",
     "test:remote": "node scripts/verify-remote.mjs"
