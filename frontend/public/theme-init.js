@@ -1,4 +1,8 @@
 (() => {
+  if (window.self !== window.top) {
+    document.documentElement.classList.add('bitrix-embedded');
+  }
+
   const storedTheme = localStorage.getItem('fortadocs-theme');
   const theme = storedTheme === 'dark' || storedTheme === 'light'
     ? storedTheme

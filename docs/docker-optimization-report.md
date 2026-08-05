@@ -195,3 +195,62 @@ remove volumes.
 
 Conclusao: a configuracao final prioriza fidelidade, seguranca e capacidade de deploy. Forcar a
 meta de 550 a 700 MB agora exigiria uma mudanca arquitetural, nao apenas limpeza de Dockerfile.
+
+## Auditoria complementar de arquivos - 05/08/2026
+
+Esta revisao separa tres medidas que costumam ser confundidas: espaco em disco na maquina de
+desenvolvimento, tamanho das imagens publicadas e memoria RAM usada pelos processos. Excluir um
+arquivo local pode liberar disco sem alterar a RAM do backend no Render ou no Docker.
+
+### Medicoes atuais
+
+| Item | Tamanho aproximado | Natureza | Decisao recomendada |
+|---|---:|---|---|
+| Cache de build do Docker | 3,352 GB | Regeneravel e compartilhado entre projetos | Limpar com o comando seguro depois de 24 h; usar `:all` apenas quando precisar recuperar espaco imediatamente |
+| `node_modules` do backend | 480,6 MB | Dependencias locais de desenvolvimento | Manter durante o desenvolvimento; pode ser recriado com `npm ci` |
+| `node_modules` da raiz | 165,6 MB | Wrangler usado pelo tunel HTTPS de teste | Manter se o teste remoto for utilizado; pode ser recriado com `npm ci` |
+| `node_modules` do frontend | 128,4 MB | Dependencias locais de desenvolvimento | Manter durante o desenvolvimento; pode ser recriado com `npm ci` |
+| `.artifacts` | 127,6 MB | Capturas, perfis e evidencias de testes | Pode ser removido depois que as evidencias nao forem mais necessarias |
+| `backend/dist` | 1,15 MB | Build regeneravel | Pode ser removido e recriado por `npm run build` |
+| `frontend/dist` | 0,46 MB | Build regeneravel | Pode ser removido e recriado por `npm run build` |
+| Volumes Docker | 75 MB | Banco e arquivos persistentes | Preservar; nao sao cache |
+
+Os maiores grupos dentro de `.artifacts` sao `pdfinspect` (70,2 MB), `ui-review` (25,1 MB),
+`ui-review-final` (19,1 MB), `chrome-html-profile` (5,4 MB) e `chrome-profile` (5,4 MB).
+Eles nao entram nas imagens porque estao cobertos pelo `.dockerignore`.
+
+Uma limpeza apenas de artefatos e builds locais recuperaria cerca de 129 MB. Incluindo as tres
+pastas `node_modules`, o total local recuperavel seria de aproximadamente 904 MB, ao custo de
+reinstalar dependencias. Somado ao cache atual do Docker, o potencial chega a cerca de 4,25 GB.
+Esse ganho e de disco local, nao de memoria RAM em producao.
+
+### Arquivos e componentes que devem permanecer
+
+- `templates/term.docx` e `templates/original/term-original.docx`: o primeiro e usado na geracao;
+  o segundo e a fonte juridica imutavel para auditoria e reproducao.
+- `backend/prisma/migrations`, schema e Prisma CLI: o startup atual do Render executa migrations
+  e seed antes da API; retirar isso agora pode impedir um deploy seguro.
+- LibreOffice Writer e fontes do container: necessarios para preservar o layout do documento.
+- Volumes Docker: guardam dados reais e nao participam do cache de build.
+- Integracao legada ZapSign: ainda atende simulacao local, sincronizacao e historico; sua retirada
+  exige uma migracao funcional, nao uma simples limpeza de arquivos.
+- Documentacao de arquitetura, operacao e homologacao: ocupa pouco espaco e reduz risco operacional.
+- Wrangler na raiz: mantem o comando `test:tunnel` reproduzivel; e opcional apenas se esse fluxo
+  de teste for formalmente abandonado.
+
+### Otimizacoes aprovadas e proximos limites
+
+- O frontend publicado como site estatico nao mantem um processo Node nem consome a RAM de uma
+  instancia de servidor no Render.
+- A API ja limita a conversao para um processo LibreOffice por vez, que e a protecao mais
+  importante contra pico de memoria no plano atual.
+- Nao foi aplicado limite artificial de heap do Node. Um valor baixo poderia fazer a API encerrar
+  durante a conversao; essa mudanca depende de teste de carga medindo o pico real.
+- A imagem do backend so tera uma reducao material adicional quando migrations puderem ser
+  executadas por um pipeline anterior ao startup, permitindo retirar o Prisma CLI do runtime.
+- A lista de termos ja carrega paginas de 30 registros e as telas sao divididas em chunks. Reduzir
+  o cache do navegador agora traria ganho pequeno e pioraria a navegacao de retorno.
+
+Nenhum arquivo persistente foi excluido nesta auditoria. A recomendacao e executar primeiro
+`npm.cmd run local:clean-cache` e remover `.artifacts` somente depois da confirmacao de que as
+evidencias visuais e os PDFs de teste nao serao mais usados.

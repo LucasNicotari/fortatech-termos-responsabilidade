@@ -51,6 +51,41 @@ html.bitrix-embedded #root {
   border-radius: 0;
 }
 
+/* In the Bitrix light slider, a narrow transition makes the dark app read as
+   an intentional embedded panel instead of a dark rectangle with a white rim. */
+html.bitrix-embedded.dark,
+html.bitrix-embedded.dark body {
+  background: rgb(226 233 239);
+}
+
+html.bitrix-embedded.dark #root {
+  min-height: 100vh;
+  padding: 4px 5px 0;
+  background:
+    radial-gradient(circle at 12% 0%, rgb(47 198 246 / 0.13), transparent 210px),
+    linear-gradient(135deg, rgb(238 242 244), rgb(215 225 233));
+}
+
+html.bitrix-embedded.dark .fortadocs-shell {
+  min-height: calc(100vh - 4px);
+  overflow: clip;
+  border-radius: 12px 12px 0 0;
+  box-shadow:
+    0 0 0 1px rgb(17 25 33 / 0.2),
+    0 8px 24px rgb(17 25 33 / 0.2);
+}
+
+@media (max-width: 640px) {
+  html.bitrix-embedded.dark #root {
+    padding: 2px 2px 0;
+  }
+
+  html.bitrix-embedded.dark .fortadocs-shell {
+    min-height: calc(100vh - 2px);
+    border-radius: 9px 9px 0 0;
+  }
+}
+
 button,
 input,
 select,
