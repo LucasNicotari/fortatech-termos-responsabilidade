@@ -192,11 +192,11 @@ export function Signatures() {
       </header>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-b24-border bg-surface px-3 py-2 sm:max-w-sm">
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-b24-border/70 bg-surface px-3 py-2 shadow-sm sm:max-w-sm dark:border-white/[0.05] dark:bg-surface/70 dark:shadow-none">
           <Search size={16} className="shrink-0 text-steel" />
           <input value={search} maxLength={120} onChange={(event) => changeSearch(event.target.value)} placeholder="Buscar colaborador, e-mail ou ID" className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none" />
         </label>
-        <div className="flex max-w-full gap-1 overflow-x-auto rounded border border-b24-border bg-surface p-1" aria-label="Filtrar termos">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg border border-b24-border/70 bg-surface p-1 shadow-sm dark:border-white/[0.05] dark:bg-surface/70 dark:shadow-none" aria-label="Filtrar termos">
           {filters.map((item) => (
             <button key={item.id} onClick={() => changeFilter(item.id)} aria-pressed={filter === item.id} className={`focus-ring shrink-0 rounded px-2.5 py-1.5 text-xs font-medium transition ${filter === item.id ? 'bg-sky-50 text-b24-blue-dark' : 'text-steel hover:bg-b24-bg hover:text-ink'}`}>{item.label}</button>
           ))}
@@ -221,7 +221,7 @@ export function Signatures() {
       )}
 
       {canOperate && visible.length > 0 && (
-        <label className="mb-2 flex items-center gap-2 rounded border border-b24-border bg-surface px-3 py-2 text-xs font-medium text-steel lg:hidden">
+        <label className="mb-2 flex items-center gap-2 rounded-lg border border-b24-border/70 bg-surface px-3 py-2 text-xs font-medium text-steel lg:hidden dark:border-white/[0.05] dark:bg-surface/70">
           <input
             ref={mobileSelectAllRef}
             type="checkbox"
@@ -236,8 +236,8 @@ export function Signatures() {
         </label>
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden rounded border border-b24-border bg-surface">
-        <div className="hidden items-center border-b border-b24-border bg-b24-bg/60 px-5 py-2.5 text-xs font-semibold text-steel lg:flex">
+      <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-b24-border/70 bg-surface shadow-sm dark:border-white/[0.05] dark:bg-surface/70 dark:shadow-[0_16px_42px_rgba(0,0,0,0.14)]">
+        <div className="hidden items-center border-b border-b24-border/60 bg-b24-bg/45 px-5 py-2.5 text-xs font-semibold text-steel lg:flex dark:border-white/[0.045] dark:bg-white/[0.018]">
           {canOperate && (
             <span className="flex w-10 shrink-0 items-center">
               <input
@@ -269,7 +269,7 @@ export function Signatures() {
             </div>
           </div>
         ) : visible.length ? (
-          <div className="divide-y divide-b24-border/80">
+          <div className="divide-y divide-b24-border/60 dark:divide-white/[0.045]">
             {visible.map((request) => {
               const signature = request.signatures?.[0];
               const status = signature?.status || request.status;
@@ -313,7 +313,7 @@ export function Signatures() {
                   </div>
 
                   {expanded && (
-                    <div className="border-t border-b24-border/70 bg-b24-bg/45 px-4 py-4 lg:px-5">
+                    <div className="border-t border-b24-border/60 bg-b24-bg/35 px-4 py-4 lg:px-5 dark:border-white/[0.045] dark:bg-white/[0.018]">
                       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                         <div className="grid gap-3 text-xs text-steel sm:grid-cols-3">
                           <Detail label="Criado" value={formatDate(request.createdAt)} />
@@ -326,7 +326,7 @@ export function Signatures() {
                         </div>
                         {signature && <SignatureActions signature={signature} localMode={localMode} canOperate={canOperate} onSync={() => refresh.mutate(signature.id)} onRetry={() => retry.mutate(signature.id)} onRetryArchive={() => retryArchive.mutate(signature.id)} onDownload={() => download(signature.id)} />}
                       </div>
-                      {!!request.equipment?.length && <div className="mt-4 flex flex-wrap gap-2">{request.equipment.map((item, index) => <span key={item.id || index} className="rounded-full border border-b24-border bg-surface px-2.5 py-1 text-xs text-steel">{item.quantity}× {item.description}{item.assetTag ? ` · Patrimônio ${item.assetTag}` : ''}</span>)}</div>}
+                      {!!request.equipment?.length && <div className="mt-4 flex flex-wrap gap-2">{request.equipment.map((item, index) => <span key={item.id || index} className="rounded-full border border-b24-border/60 bg-surface px-2.5 py-1 text-xs text-steel dark:border-white/[0.05] dark:bg-white/[0.025]">{item.quantity}× {item.description}{item.assetTag ? ` · Patrimônio ${item.assetTag}` : ''}</span>)}</div>}
                       {(request.failureReason || signature?.archiveError) && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-xs text-coral">{request.failureReason || signature?.archiveError}</p>}
                     </div>
                   )}
@@ -338,7 +338,7 @@ export function Signatures() {
           <div className="grid min-h-64 flex-1 place-items-center px-5 py-10 text-center"><div><FileText className="mx-auto text-zinc-300" size={32} /><p className="mt-3 font-medium text-ink">Nenhum termo encontrado</p><p className="mt-1 text-xs text-steel">{requests.length ? 'Altere a busca ou os filtros selecionados.' : canOperate ? 'Crie o primeiro termo para iniciar o acompanhamento.' : 'Os termos disponíveis aparecerão aqui.'}</p>{canOperate && !requests.length && <Link to="/send-requests" className="focus-ring mt-4 inline-flex items-center gap-2 rounded-lg bg-b24-blue px-3.5 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><FilePlus2 size={15} /> Criar primeiro termo</Link>}</div></div>
         )}
         {visible.length > 0 && (
-          <div ref={loadMoreRef} className="border-t border-b24-border bg-b24-bg/35 px-4 py-3 text-center">
+          <div ref={loadMoreRef} className="border-t border-b24-border/60 bg-b24-bg/30 px-4 py-3 text-center dark:border-white/[0.045] dark:bg-white/[0.015]">
             {requestsQuery.hasNextPage ? (
               <button
                 type="button"

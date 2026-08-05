@@ -7,10 +7,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   ExternalLink,
   Eye,
-  LoaderCircle,
   Package,
   Pencil,
   Plus,
@@ -66,7 +64,6 @@ interface TermFormState {
   chatRecipientBitrixUserId: string;
 }
 
-const MAX_TERMS = 5;
 const emptyEquipment = (): Equipment => ({
   quantity: 1,
   description: '',
@@ -105,10 +102,8 @@ export function SendRequests() {
   const [terms, setTerms] = useState<TermFormState[]>(() => [newTerm()]);
   const termsRef = useRef(terms);
   const [activeTermId, setActiveTermId] = useState(terms[0].id);
-  const [reviewAll, setReviewAll] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [showResult, setShowResult] = useState(false);
   const [notificationSearch, setNotificationSearch] = useState('');
-  const helpRef = useRef<HTMLDivElement>(null);
 
   const { data: employees = [] } = useQuery({
     queryKey: ['bitrix-employees'],
@@ -135,29 +130,9 @@ export function SendRequests() {
   useEffect(() => {
     termsRef.current = terms;
   }, [terms]);
-  useEffect(() => {
-    if (!helpOpen) return;
-    const close = (event: MouseEvent) => {
-      if (!helpRef.current?.contains(event.target as Node)) setHelpOpen(false);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setHelpOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [helpOpen]);
-
   const activeTerm = terms.find((term) => term.id === activeTermId) || terms[0];
   const providerReady = Boolean(providerQuery.data?.configured);
   const flowLocked = terms.some((term) => term.sendStatus === 'pending' || term.sendStatus === 'success');
-  const allComplete = terms.every(termComplete);
-  const allPrepared = terms.every((term) => Boolean(term.draftId && term.previewUrl));
-  const sentCount = terms.filter((term) => term.sendStatus === 'success').length;
-  const failedCount = terms.filter((term) => term.sendStatus === 'error').length;
   const operationPending = terms.some((term) =>
     term.prepareStatus === 'pending' || term.sendStatus === 'pending'
   );
@@ -205,35 +180,6 @@ export function SendRequests() {
     });
   }
 
-  function addTerm() {
-    if (terms.length >= MAX_TERMS || flowLocked) return;
-    const defaults = (workflowQuery.data?.bitrixUserIds || []).map(String);
-    const term = newTerm(defaults);
-    setTerms((items) => [...items, term]);
-    setActiveTermId(term.id);
-    setReviewAll(false);
-    setNotificationSearch('');
-  }
-
-  async function removeTerm(term: TermFormState) {
-    if (terms.length === 1 || flowLocked) return;
-    const hasData = Boolean(
-      term.employeeId || term.cpf || term.equipment.some((item) => item.description)
-    );
-    if (hasData && !window.confirm('Remover este termo do envio?')) return;
-    try {
-      if (term.draftId) await api.delete(`/send-requests/${term.draftId}`);
-      const remaining = termsRef.current.filter((item) => item.id !== term.id);
-      setTerms(remaining);
-      if (activeTermId === term.id) setActiveTermId(remaining[0].id);
-    } catch (error) {
-      updateTerm(term.id, {
-        prepareStatus: 'error',
-        prepareError: apiErrorMessage(error, 'Não foi possível remover este termo.')
-      });
-    }
-  }
-
   async function prepareTerm(termId: string) {
     const term = termsRef.current.find((item) => item.id === termId);
     if (!term || !termComplete(term)) return { ok: false, requestId: term?.draftId || null };
@@ -275,10 +221,6 @@ export function SendRequests() {
       });
       return { ok: false, requestId };
     }
-  }
-
-  async function prepareAll() {
-    for (const term of termsRef.current) await prepareTerm(term.id);
   }
 
   async function sendTerm(termId: string, preparedRequestId?: string | null) {
@@ -361,49 +303,43 @@ export function SendRequests() {
     );
   }
 
-  async function sendTerms(targets = termsRef.current) {
+  async function submitTerm() {
     if (!providerReady) return;
-    const prepared = new Map<string, string>();
-    for (const term of targets) {
-      const result = await prepareTerm(term.id);
-      if (result.ok && result.requestId) prepared.set(term.id, result.requestId);
-    }
-    for (const term of targets) {
-      const requestId = prepared.get(term.id);
-      if (requestId) await sendTerm(term.id, requestId);
-    }
-    setReviewAll(true);
+    const term = termsRef.current[0];
+    const prepared = await prepareTerm(term.id);
+    if (!prepared.ok || !prepared.requestId) return;
+    await sendTerm(term.id, prepared.requestId);
+    setShowResult(true);
     invalidateHistory();
   }
 
   async function retryFailedTerms() {
-    const failed = termsRef.current.filter((term) => term.sendStatus === 'error');
-    for (const term of failed) {
-      if (!term.draftId) continue;
-      updateTerm(term.id, { prepareStatus: 'pending', prepareError: '', sendError: '' });
-      try {
-        const { data: current } = await api.get<SendRequest>(`/send-requests/${term.draftId}`);
-        if (['SENT', 'VIEWED', 'IN_PROGRESS', 'SIGNED', 'COMPLETED'].includes(current.status)) {
-          markTermSent(term.id, current);
-          continue;
-        }
-        await api.post(`/send-requests/${term.draftId}/retry`);
-        const { data: preview } = await api.post<{ previewUrl: string }>(
-          `/send-requests/${term.draftId}/preview`
-        );
-        updateTerm(term.id, {
-          previewUrl: preview.previewUrl,
-          prepareStatus: 'success',
-          sendStatus: 'idle'
-        });
-        await sendTerm(term.id, term.draftId);
-      } catch (error) {
-        updateTerm(term.id, {
-          prepareStatus: 'error',
-          sendStatus: 'error',
-          sendError: apiErrorMessage(error, 'Não foi possível tentar este termo novamente.')
-        });
+    const term = termsRef.current[0];
+    if (!term.draftId || term.sendStatus !== 'error') return;
+    updateTerm(term.id, { prepareStatus: 'pending', prepareError: '', sendError: '' });
+    try {
+      const { data: current } = await api.get<SendRequest>(`/send-requests/${term.draftId}`);
+      if (['SENT', 'VIEWED', 'IN_PROGRESS', 'SIGNED', 'COMPLETED'].includes(current.status)) {
+        markTermSent(term.id, current);
+        invalidateHistory();
+        return;
       }
+      await api.post(`/send-requests/${term.draftId}/retry`);
+      const { data: preview } = await api.post<{ previewUrl: string }>(
+        `/send-requests/${term.draftId}/preview`
+      );
+      updateTerm(term.id, {
+        previewUrl: preview.previewUrl,
+        prepareStatus: 'success',
+        sendStatus: 'idle'
+      });
+      await sendTerm(term.id, term.draftId);
+    } catch (error) {
+      updateTerm(term.id, {
+        prepareStatus: 'error',
+        sendStatus: 'error',
+        sendError: apiErrorMessage(error, 'Não foi possível tentar este termo novamente.')
+      });
     }
     invalidateHistory();
   }
@@ -419,7 +355,7 @@ export function SendRequests() {
     const term = newTerm(defaults);
     setTerms([term]);
     setActiveTermId(term.id);
-    setReviewAll(false);
+    setShowResult(false);
     setNotificationSearch('');
   }
 
@@ -441,94 +377,36 @@ export function SendRequests() {
           <h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">Envio de termo</h1>
           <p className="mt-0.5 text-sm text-steel">Preencha em três etapas rápidas.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link to="/terms" className="focus-ring mr-1 text-sm font-semibold text-b24-blue-dark hover:underline">
-            Ver todos os termos
-          </Link>
-          <div ref={helpRef} className="relative">
-            <button
-              type="button"
-              aria-label="Como adicionar termos"
-              aria-expanded={helpOpen}
-              onClick={() => setHelpOpen((open) => !open)}
-              className="focus-ring grid h-9 w-9 place-items-center rounded-lg border border-b24-border bg-surface text-steel hover:bg-sky-50 hover:text-b24-blue-dark"
-            >
-              <CircleHelp size={17} />
-            </button>
-            {helpOpen && (
-              <div role="tooltip" className="absolute right-0 top-11 z-40 w-64 rounded-lg border border-b24-border bg-surface p-3 text-xs leading-relaxed text-steel shadow-lg">
-                <strong className="block text-ink">Até 5 termos por envio</strong>
-                <span className="mt-1 block">Adicione mais quatro colaboradores. Cada pessoa receberá um documento individual para revisar e assinar.</span>
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            disabled={terms.length >= MAX_TERMS || flowLocked}
-            onClick={addTerm}
-            title={terms.length >= MAX_TERMS ? 'Limite de 5 termos atingido' : 'Adicionar outro termo'}
-            className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg border border-b24-blue px-3 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <Plus size={16} /> Termo
-          </button>
-        </div>
+        <Link to="/terms" className="focus-ring text-sm font-semibold text-b24-blue-dark hover:underline">
+          Ver todos os termos
+        </Link>
       </header>
 
-      <ProviderNotice provider={providerQuery.data} ready={providerReady} />
+      {!showResult && <ProviderNotice provider={providerQuery.data} ready={providerReady} />}
 
-      {terms.length > 1 && (
-        <TermTabs
-          terms={terms}
-          activeId={activeTerm.id}
-          disabled={operationPending}
-          onSelect={(id) => {
-            setActiveTermId(id);
-            setReviewAll(false);
-            setNotificationSearch('');
-          }}
-          onRemove={removeTerm}
-        />
-      )}
-
-      {(sentCount > 0 || failedCount > 0) && (
-        <SendResultBanner
-          sent={sentCount}
-          failed={failedCount}
-          total={terms.length}
+      {showResult ? (
+        <TermResult
+          term={activeTerm}
+          providerLocal={Boolean(providerQuery.data?.local)}
+          pending={operationPending}
           onNew={startNewSend}
+          onEdit={() => {
+            setShowResult(false);
+            updateTerm(activeTerm.id, { step: termEmployeeComplete(activeTerm) ? 3 : 1 });
+          }}
+          onRetry={retryFailedTerms}
+          onOpenConversation={() => openConversation(activeTerm)}
         />
-      )}
-
-      <div className="overflow-hidden rounded-xl border border-b24-border bg-surface shadow-sm">
-        {!reviewAll && (
-          <div className="grid grid-cols-3 border-b border-b24-border bg-b24-bg/45">
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-b24-border/70 bg-surface shadow-sm dark:border-white/[0.06] dark:bg-surface/80 dark:shadow-[0_16px_42px_rgba(0,0,0,0.16)]">
+          <div className="grid grid-cols-3 border-b border-b24-border/70 bg-b24-bg/45 dark:border-white/[0.05]">
             <StepButton number={1} label="Colaborador" current={activeTerm.step} available onClick={() => updateTerm(activeTerm.id, { step: 1 })} />
             <StepButton number={2} label="Equipamentos" current={activeTerm.step} available={employeeComplete} onClick={() => updateTerm(activeTerm.id, { step: 2 })} />
             <StepButton number={3} label="Revisar e enviar" current={activeTerm.step} available={employeeComplete && equipmentComplete} onClick={() => updateTerm(activeTerm.id, { step: 3 })} />
           </div>
-        )}
 
-        <div className="p-4 sm:p-5">
-          {reviewAll ? (
-            <TermsReview
-              terms={terms}
-              providerReady={providerReady}
-              providerLocal={Boolean(providerQuery.data?.local)}
-              pending={operationPending}
-              allPrepared={allPrepared}
-              onBack={() => setReviewAll(false)}
-              onEdit={(term) => {
-                setActiveTermId(term.id);
-                setReviewAll(false);
-                updateTerm(term.id, { step: termEmployeeComplete(term) ? 3 : 1 });
-              }}
-              onPrepare={prepareAll}
-              onSend={() => sendTerms()}
-              onRetry={retryFailedTerms}
-              onOpenPreview={openPreview}
-              onOpenConversation={openConversation}
-            />
-          ) : activeTerm.step === 1 ? (
+          <div className="p-4 sm:p-5">
+          {activeTerm.step === 1 ? (
             <div>
               <SectionTitle icon={UserRound} title="Dados do colaborador" description="Selecione o colaborador; e-mail e departamento vêm automaticamente do Bitrix24." />
               <div className="grid gap-4 md:grid-cols-2">
@@ -595,16 +473,13 @@ export function SendRequests() {
                 <BackButton onClick={() => updateTerm(activeTerm.id, { step: 2 })} />
                 <button disabled={activeTerm.prepareStatus === 'pending' || flowLocked} onClick={() => prepareTerm(activeTerm.id)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-b24-blue px-4 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50 disabled:opacity-50"><Eye size={16} /> {activeTerm.prepareStatus === 'pending' ? 'Preparando...' : activeTerm.previewUrl ? 'Atualizar prévia' : 'Gerar prévia'}</button>
                 {activeTerm.previewUrl && <button type="button" disabled={activeTerm.prepareStatus === 'pending'} onClick={() => openPreview(activeTerm)} className="focus-ring inline-flex items-center gap-2 rounded-lg border border-mint px-4 py-2 text-sm font-semibold text-mint hover:bg-emerald-50 disabled:opacity-50"><ExternalLink size={15} /> Visualizar PDF</button>}
-                {terms.length === 1 ? (
-                  <button disabled={!activeTerm.draftId || !activeTerm.previewUrl || !providerReady || operationPending || activeTerm.sendStatus === 'success'} onClick={() => sendTerms([activeTerm])} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50" title={!providerReady ? providerSetupMessage(providerQuery.data) : undefined}><Send size={16} /> {activeTerm.sendStatus === 'pending' ? 'Enviando...' : 'Enviar termo'}</button>
-                ) : (
-                  <button disabled={!allComplete || operationPending} onClick={() => setReviewAll(true)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50" title={!allComplete ? 'Complete os termos sinalizados acima' : undefined}><ChevronRight size={16} /> Revisar {terms.length} termos</button>
-                )}
+                <button disabled={!activeTerm.draftId || !activeTerm.previewUrl || !providerReady || operationPending || activeTerm.sendStatus === 'success'} onClick={submitTerm} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50" title={!providerReady ? providerSetupMessage(providerQuery.data) : undefined}><Send size={16} /> {activeTerm.sendStatus === 'pending' ? 'Enviando...' : 'Enviar termo'}</button>
               </div>
             </div>
           )}
+          </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }
@@ -621,111 +496,47 @@ function termComplete(term: TermFormState) {
   return termEmployeeComplete(term) && termEquipmentComplete(term);
 }
 
-function TermTabs({ terms, activeId, disabled, onSelect, onRemove }: {
-  terms: TermFormState[];
-  activeId: string;
-  disabled: boolean;
-  onSelect: (id: string) => void;
-  onRemove: (term: TermFormState) => void;
-}) {
-  return (
-    <div className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Termos deste envio">
-      {terms.map((term, index) => {
-        const active = term.id === activeId;
-        const label = term.name ? term.name.split(/\s+/)[0] : `Termo ${index + 1}`;
-        return (
-          <div key={term.id} className={`flex shrink-0 items-center rounded-full border ${active ? 'border-b24-blue bg-sky-50 text-b24-blue-dark' : 'border-b24-border bg-surface text-steel'}`}>
-            <button type="button" disabled={disabled} onClick={() => onSelect(term.id)} className="focus-ring inline-flex items-center gap-1.5 rounded-l-full py-1.5 pl-3 pr-2 text-xs font-semibold disabled:opacity-60">
-              <TermStatusIcon term={term} />
-              <span className="max-w-28 truncate">{label}</span>
-            </button>
-            <button type="button" disabled={disabled || term.sendStatus === 'success'} onClick={() => onRemove(term)} aria-label={`Remover ${label}`} className="focus-ring mr-1 grid h-6 w-6 place-items-center rounded-full hover:bg-red-50 hover:text-coral disabled:opacity-35"><X size={12} /></button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function TermStatusIcon({ term }: { term: TermFormState }) {
-  if (term.sendStatus === 'pending' || term.prepareStatus === 'pending') return <LoaderCircle size={13} className="animate-spin" />;
-  if (term.sendStatus === 'success') return <Check size={13} className="text-mint" />;
-  if (term.sendStatus === 'error' || term.prepareStatus === 'error') return <AlertCircle size={13} className="text-coral" />;
-  if (term.previewUrl) return <Check size={13} />;
-  return <span className={`h-1.5 w-1.5 rounded-full ${termComplete(term) ? 'bg-b24-blue' : 'bg-zinc-300'}`} />;
-}
-
-function TermsReview({ terms, providerReady, providerLocal, pending, allPrepared, onBack, onEdit, onPrepare, onSend, onRetry, onOpenPreview, onOpenConversation }: {
-  terms: TermFormState[];
-  providerReady: boolean;
+function TermResult({ term, providerLocal, pending, onNew, onEdit, onRetry, onOpenConversation }: {
+  term: TermFormState;
   providerLocal: boolean;
   pending: boolean;
-  allPrepared: boolean;
-  onBack: () => void;
-  onEdit: (term: TermFormState) => void;
-  onPrepare: () => void;
-  onSend: () => void;
-  onRetry: () => void;
-  onOpenPreview: (term: TermFormState) => void;
-  onOpenConversation: (term: TermFormState) => void;
-}) {
-  const failed = terms.filter((term) => term.sendStatus === 'error').length;
-  const sent = terms.filter((term) => term.sendStatus === 'success').length;
-  return (
-    <div>
-      <SectionTitle icon={Eye} title="Revisão do envio" description="Cada colaborador receberá seu próprio documento e terá acompanhamento individual." />
-      <div className="divide-y divide-b24-border overflow-hidden rounded-lg border border-b24-border">
-        {terms.map((term, index) => (
-          <div key={term.id} className="grid gap-2 bg-surface px-3 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-b24-bg text-xs font-semibold text-steel">{index + 1}</span>
-            <div className="min-w-0">
-              <strong className="block truncate text-sm text-ink">{term.name || 'Colaborador não informado'}</strong>
-              <span className="block truncate text-xs text-steel">{term.equipment.length} {term.equipment.length === 1 ? 'equipamento' : 'equipamentos'} · {termStatusLabel(term)}</span>
-              {(term.prepareError || term.sendError) && <span className="mt-1 block text-xs text-coral">{term.sendError || term.prepareError}</span>}
-            </div>
-            <div className="flex items-center gap-1.5 sm:justify-end">
-              {term.sendStatus !== 'success' && term.previewUrl && <button type="button" disabled={pending} onClick={() => onOpenPreview(term)} aria-label={`Visualizar PDF de ${term.name}`} className="focus-ring rounded p-2 text-b24-blue-dark hover:bg-sky-50 disabled:opacity-50" title="Visualizar PDF"><Eye size={15} /></button>}
-              {!providerLocal && term.sendStatus === 'success' && <button type="button" onClick={() => onOpenConversation(term)} aria-label={`Abrir conversa de ${term.name} no Bitrix24`} className="focus-ring rounded p-2 text-b24-blue-dark hover:bg-sky-50" title="Abrir conversa no Bitrix24"><ExternalLink size={15} /></button>}
-              {providerLocal && term.localSigningUrl && <a href={term.localSigningUrl} target="_blank" rel="noreferrer" className="focus-ring rounded p-2 text-b24-blue-dark hover:bg-sky-50" title="Abrir assinatura"><Eye size={15} /></a>}
-              {term.sendStatus !== 'success' && <button type="button" disabled={pending} onClick={() => onEdit(term)} className="focus-ring rounded p-2 text-steel hover:bg-b24-bg" title="Editar termo"><Pencil size={15} /></button>}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-b24-border pt-4">
-        {!sent && <BackButton onClick={onBack} />}
-        {!allPrepared && !sent && <button type="button" disabled={pending} onClick={onPrepare} className="focus-ring inline-flex items-center gap-2 rounded-lg border border-b24-blue px-4 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50 disabled:opacity-50"><Eye size={16} /> {pending ? 'Preparando...' : `Preparar ${terms.length} termos`}</button>}
-        {failed > 0 && <button type="button" disabled={pending} onClick={onRetry} className="focus-ring inline-flex items-center gap-2 rounded-lg border border-coral px-4 py-2 text-sm font-semibold text-coral hover:bg-red-50 disabled:opacity-50"><RotateCcw size={16} /> {pending ? 'Tentando novamente...' : `Tentar novamente (${failed})`}</button>}
-        {allPrepared && sent < terms.length && failed === 0 && <button type="button" disabled={!providerReady || pending} onClick={onSend} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50"><Send size={16} /> {pending ? 'Enviando...' : `Enviar ${terms.length} termos`}</button>}
-      </div>
-    </div>
-  );
-}
-
-function termStatusLabel(term: TermFormState) {
-  if (term.sendStatus === 'success') return 'Enviado';
-  if (term.sendStatus === 'error') return 'Falha no envio';
-  if (term.sendStatus === 'pending') return 'Enviando';
-  if (term.prepareStatus === 'pending') return 'Preparando PDF';
-  if (term.prepareStatus === 'error') return 'Falha na preparação';
-  if (term.previewUrl) return 'Pronto para enviar';
-  return termComplete(term) ? 'Pronto para preparar' : 'Preenchimento pendente';
-}
-
-function SendResultBanner({ sent, failed, total, onNew }: {
-  sent: number;
-  failed: number;
-  total: number;
   onNew: () => void;
+  onEdit: () => void;
+  onRetry: () => void;
+  onOpenConversation: () => void;
 }) {
-  const complete = sent === total;
+  const sent = term.sendStatus === 'success';
   return (
-    <div role="status" className={`mb-3 flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm ${complete ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
-      <span className="flex-1">
-        <strong>{complete ? 'Envio concluído.' : 'Envio concluído parcialmente.'}</strong>{' '}
-        {sent} de {total} {total === 1 ? 'termo foi enviado' : 'termos foram enviados'}{failed ? `; ${failed} precisa${failed === 1 ? '' : 'm'} de nova tentativa.` : '.'}
-      </span>
-      {complete && <button type="button" onClick={onNew} className="focus-ring rounded-lg border border-emerald-300 bg-surface px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100">Novo envio</button>}
+    <div role="status" aria-live="polite" className={`overflow-hidden rounded-2xl border px-5 py-6 shadow-sm sm:px-7 ${sent ? 'border-emerald-200/70 bg-emerald-50' : 'border-red-200/70 bg-red-50'} dark:border-white/[0.06] dark:bg-surface/70 dark:shadow-[0_18px_46px_rgba(0,0,0,0.16)]`}>
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${sent ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-coral'}`}>
+          {sent ? <Check size={22} /> : <AlertCircle size={22} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-semibold text-ink">{sent ? 'Termo enviado com sucesso' : 'Não foi possível enviar o termo'}</h2>
+          <p className="mt-1 text-sm text-steel">
+            {sent
+              ? `O convite individual de ${term.name} foi enviado ao chat do Bitrix24.`
+              : term.sendError || term.prepareError || 'Confira os dados e tente novamente.'}
+          </p>
+          <p className="mt-1 text-xs text-steel">{term.equipment.length} {term.equipment.length === 1 ? 'equipamento vinculado' : 'equipamentos vinculados'}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          {sent && !providerLocal && (
+            <button type="button" onClick={onOpenConversation} className="focus-ring inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50">
+              <ExternalLink size={15} /> Abrir conversa
+            </button>
+          )}
+          {sent && providerLocal && term.localSigningUrl && (
+            <a href={term.localSigningUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50">
+              <Eye size={15} /> Abrir assinatura
+            </a>
+          )}
+          {!sent && <button type="button" disabled={pending} onClick={onEdit} className="focus-ring rounded-lg px-3 py-2 text-sm font-medium text-steel hover:bg-b24-bg disabled:opacity-50">Revisar dados</button>}
+          {!sent && <button type="button" disabled={pending} onClick={onRetry} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50"><RotateCcw size={16} /> {pending ? 'Tentando novamente...' : 'Tentar novamente'}</button>}
+          {sent && <button type="button" onClick={onNew} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark"><Plus size={16} /> Enviar novo termo</button>}
+        </div>
+      </div>
     </div>
   );
 }
