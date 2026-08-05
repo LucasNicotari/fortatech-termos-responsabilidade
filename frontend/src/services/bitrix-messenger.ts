@@ -24,6 +24,19 @@ export function openBitrixConversation(
   openWithEmbeddedSdk(bitrixUserId, portalUrl);
 }
 
+export function buildBitrixConversationUrl(bitrixUserId: string, portalUrl?: string) {
+  if (!portalUrl || !bitrixUserId) return undefined;
+
+  try {
+    const url = new URL('/online/', portalUrl);
+    if (url.protocol !== 'https:') return undefined;
+    url.searchParams.set('IM_DIALOG', bitrixUserId);
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function openWithEmbeddedSdk(bitrixUserId: string, portalUrl?: string) {
   const bitrix24 = window.BX24;
   if (bitrix24?.im?.openMessenger) {
@@ -31,12 +44,8 @@ function openWithEmbeddedSdk(bitrixUserId: string, portalUrl?: string) {
     return;
   }
 
-  const normalizedPortal = portalUrl?.replace(/\/$/, '');
-  if (normalizedPortal) {
-    window.open(
-      `${normalizedPortal}/online/?IM_DIALOG=${encodeURIComponent(bitrixUserId)}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
+  const conversationUrl = buildBitrixConversationUrl(bitrixUserId, portalUrl);
+  if (conversationUrl) {
+    window.open(conversationUrl, '_blank', 'noopener,noreferrer');
   }
 }

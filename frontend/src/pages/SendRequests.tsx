@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, apiErrorMessage } from '../services/api';
-import { openBitrixConversation } from '../services/bitrix-messenger';
+import { buildBitrixConversationUrl, openBitrixConversation } from '../services/bitrix-messenger';
 import { BitrixEmployee, Equipment, SendRequest } from '../types';
 
 interface ProviderStatus {
@@ -388,6 +388,10 @@ export function SendRequests() {
         <TermResult
           term={activeTerm}
           providerLocal={Boolean(providerQuery.data?.local)}
+          conversationUrl={buildBitrixConversationUrl(
+            activeTerm.chatRecipientBitrixUserId || activeTerm.employeeId,
+            providerQuery.data?.portalUrl
+          )}
           pending={operationPending}
           onNew={startNewSend}
           onEdit={() => {
@@ -496,9 +500,10 @@ function termComplete(term: TermFormState) {
   return termEmployeeComplete(term) && termEquipmentComplete(term);
 }
 
-function TermResult({ term, providerLocal, pending, onNew, onEdit, onRetry, onOpenConversation }: {
+function TermResult({ term, providerLocal, conversationUrl, pending, onNew, onEdit, onRetry, onOpenConversation }: {
   term: TermFormState;
   providerLocal: boolean;
+  conversationUrl?: string;
   pending: boolean;
   onNew: () => void;
   onEdit: () => void;
@@ -522,7 +527,12 @@ function TermResult({ term, providerLocal, pending, onNew, onEdit, onRetry, onOp
           <p className="mt-1 text-xs text-steel">{term.equipment.length} {term.equipment.length === 1 ? 'equipamento vinculado' : 'equipamentos vinculados'}</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
-          {sent && !providerLocal && (
+          {sent && !providerLocal && conversationUrl && (
+            <a href={conversationUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50">
+              <ExternalLink size={15} /> Abrir conversa
+            </a>
+          )}
+          {sent && !providerLocal && !conversationUrl && (
             <button type="button" onClick={onOpenConversation} className="focus-ring inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50">
               <ExternalLink size={15} /> Abrir conversa
             </button>
@@ -534,7 +544,7 @@ function TermResult({ term, providerLocal, pending, onNew, onEdit, onRetry, onOp
           )}
           {!sent && <button type="button" disabled={pending} onClick={onEdit} className="focus-ring rounded-lg px-3 py-2 text-sm font-medium text-steel hover:bg-b24-bg disabled:opacity-50">Revisar dados</button>}
           {!sent && <button type="button" disabled={pending} onClick={onRetry} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50"><RotateCcw size={16} /> {pending ? 'Tentando novamente...' : 'Tentar novamente'}</button>}
-          {sent && <button type="button" onClick={onNew} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark"><Plus size={16} /> Enviar novo termo</button>}
+          {sent && <button type="button" onClick={onNew} className="focus-ring inline-flex items-center rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark">Enviar novo termo</button>}
         </div>
       </div>
     </div>

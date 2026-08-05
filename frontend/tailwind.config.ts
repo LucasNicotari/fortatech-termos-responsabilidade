@@ -15,7 +15,7 @@ export default {
         b24: {
           bg: 'rgb(var(--color-bg) / <alpha-value>)',
           border: 'rgb(var(--color-border) / <alpha-value>)',
-          blue: '#2fc6f6',
+          blue: 'rgb(var(--color-primary) / <alpha-value>)',
           'blue-dark': 'rgb(var(--color-blue-dark) / <alpha-value>)',
           green: '#9dcf00'
         }

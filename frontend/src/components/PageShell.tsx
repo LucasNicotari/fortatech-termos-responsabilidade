@@ -51,7 +51,7 @@ export function PageShell() {
   return (
     <div className="fortadocs-shell min-h-screen overflow-x-hidden bg-b24-bg">
       <BitrixFrameSync />
-      <header className="sticky top-0 z-30 border-t-[3px] border-t-b24-blue bg-surface/95 shadow-[0_2px_14px_rgba(23,34,45,0.08)] backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-t-[3px] border-t-mint bg-surface/95 shadow-[0_2px_14px_rgba(23,34,45,0.08)] backdrop-blur-md">
         <div className="mx-auto max-w-[1600px] px-3 sm:px-5 lg:px-7">
           <div className="relative flex min-h-[58px] items-center gap-3 lg:gap-5">
             <Link to="/" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FortaDocs - Dashboard">

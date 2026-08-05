@@ -5,19 +5,21 @@
 :root {
   --color-bg: 238 242 244;
   --color-surface: 255 255 255;
-  --color-border: 223 227 232;
-  --color-ink: 49 58 68;
-  --color-steel: 82 92 105;
-  --color-blue-dark: 25 169 213;
+  --color-border: 207 216 224;
+  --color-ink: 42 52 62;
+  --color-steel: 77 90 103;
+  --color-primary: 11 127 165;
+  --color-blue-dark: 12 120 156;
 }
 
 :root.dark {
-  --color-bg: 17 25 33;
-  --color-surface: 27 38 48;
-  --color-border: 57 72 86;
-  --color-ink: 234 240 245;
-  --color-steel: 180 193 205;
-  --color-blue-dark: 71 199 238;
+  --color-bg: 16 24 32;
+  --color-surface: 27 40 51;
+  --color-border: 59 75 89;
+  --color-ink: 241 245 248;
+  --color-steel: 189 201 211;
+  --color-primary: 11 127 165;
+  --color-blue-dark: 85 200 237;
 }
 
 * {
@@ -147,7 +149,7 @@ textarea::placeholder {
 }
 
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-b24-blue focus:ring-offset-2;
+  @apply focus:outline-none focus:ring-2 focus:ring-mint focus:ring-offset-2;
 }
 
 .dark .focus-ring {
@@ -203,9 +205,12 @@ textarea::placeholder {
 }
 
 .dark .bg-emerald-50,
-.dark .bg-emerald-100,
 .dark .hover\:bg-emerald-50:hover {
-  background-color: rgb(6 95 70 / 0.3);
+  background-color: rgb(6 95 70 / 0.2);
+}
+
+.dark .bg-emerald-100 {
+  background-color: rgb(6 95 70 / 0.38);
 }
 
 .dark .bg-indigo-100 {
@@ -277,6 +282,12 @@ textarea::placeholder {
 
 .dark .border-red-200 {
   border-color: rgb(248 113 113 / 0.32);
+}
+
+/* Links use a luminous cyan in dark mode, while action buttons keep a darker
+   Bitrix blue so their white labels remain legible. */
+.dark .hover\:bg-b24-blue-dark:hover {
+  background-color: rgb(7 105 139);
 }
 
 .dark input,
