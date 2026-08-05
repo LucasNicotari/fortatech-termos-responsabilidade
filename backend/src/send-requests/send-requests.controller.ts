@@ -46,6 +46,12 @@ export class SendRequestsController {
     return this.sendRequests.preview(id);
   }
 
+  @Post(':id/preview-url')
+  @UseGuards(TermOperatorGuard)
+  previewUrl(@Param('id') id: string) {
+    return this.sendRequests.previewUrl(id);
+  }
+
   @Post(':id/send')
   @UseGuards(TermOperatorGuard)
   send(

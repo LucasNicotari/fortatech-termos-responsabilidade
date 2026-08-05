@@ -31,6 +31,8 @@ export interface SendRequest {
   sentAt?: string;
   failureReason?: string;
   selfSigningUrl?: string;
+  chatMessageId?: string;
+  chatRecipientBitrixUserId?: string;
   documentFileName?: string;
   unsignedSha256?: string;
   equipment?: Equipment[];

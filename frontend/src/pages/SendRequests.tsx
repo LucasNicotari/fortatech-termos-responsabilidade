@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, apiErrorMessage } from '../services/api';
+import { openBitrixConversation } from '../services/bitrix-messenger';
 import { BitrixEmployee, Equipment, SendRequest } from '../types';
 
 interface ProviderStatus {
@@ -61,6 +62,8 @@ interface TermFormState {
   sendStatus: OperationStatus;
   sendError: string;
   localSigningUrl: string;
+  chatMessageId: string;
+  chatRecipientBitrixUserId: string;
 }
 
 const MAX_TERMS = 5;
@@ -91,7 +94,9 @@ function newTerm(notificationIds: string[] = []): TermFormState {
     prepareError: '',
     sendStatus: 'idle',
     sendError: '',
-    localSigningUrl: ''
+    localSigningUrl: '',
+    chatMessageId: '',
+    chatRecipientBitrixUserId: ''
   };
 }
 
@@ -175,7 +180,9 @@ export function SendRequests() {
       prepareError: '',
       sendStatus: 'idle',
       sendError: '',
-      localSigningUrl: ''
+      localSigningUrl: '',
+      chatMessageId: '',
+      chatRecipientBitrixUserId: ''
     });
   }
 
@@ -310,10 +317,48 @@ export function SendRequests() {
     updateTerm(termId, {
       sendStatus: 'success',
       sendError: '',
+      chatMessageId: request.chatMessageId || '',
+      chatRecipientBitrixUserId: request.chatRecipientBitrixUserId || '',
       localSigningUrl: providerQuery.data?.local && localToken
         ? `/assinar/${encodeURIComponent(localToken)}`
         : request.selfSigningUrl || ''
     });
+  }
+
+  async function openPreview(term: TermFormState) {
+    if (!term.draftId) return;
+    const previewWindow = window.open('', '_blank');
+    if (previewWindow) previewWindow.opener = null;
+    updateTerm(term.id, { prepareStatus: 'pending', prepareError: '' });
+    try {
+      const { data } = await api.post<{ previewUrl: string }>(
+        `/send-requests/${term.draftId}/preview-url`
+      );
+      updateTerm(term.id, {
+        previewUrl: data.previewUrl,
+        prepareStatus: 'success',
+        prepareError: ''
+      });
+      if (previewWindow) {
+        previewWindow.location.replace(data.previewUrl);
+      } else {
+        window.open(data.previewUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (error) {
+      previewWindow?.close();
+      updateTerm(term.id, {
+        prepareStatus: 'error',
+        prepareError: apiErrorMessage(error, 'Não foi possível abrir a prévia deste termo.')
+      });
+    }
+  }
+
+  function openConversation(term: TermFormState) {
+    openBitrixConversation(
+      term.chatRecipientBitrixUserId || term.employeeId,
+      term.chatMessageId || undefined,
+      providerQuery.data?.portalUrl
+    );
   }
 
   async function sendTerms(targets = termsRef.current) {
@@ -480,6 +525,8 @@ export function SendRequests() {
               onPrepare={prepareAll}
               onSend={() => sendTerms()}
               onRetry={retryFailedTerms}
+              onOpenPreview={openPreview}
+              onOpenConversation={openConversation}
             />
           ) : activeTerm.step === 1 ? (
             <div>
@@ -547,7 +594,7 @@ export function SendRequests() {
               <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-b24-border pt-4">
                 <BackButton onClick={() => updateTerm(activeTerm.id, { step: 2 })} />
                 <button disabled={activeTerm.prepareStatus === 'pending' || flowLocked} onClick={() => prepareTerm(activeTerm.id)} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-b24-blue px-4 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50 disabled:opacity-50"><Eye size={16} /> {activeTerm.prepareStatus === 'pending' ? 'Preparando...' : activeTerm.previewUrl ? 'Atualizar prévia' : 'Gerar prévia'}</button>
-                {activeTerm.previewUrl && <a href={activeTerm.previewUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded-lg border border-mint px-4 py-2 text-sm font-semibold text-mint hover:bg-emerald-50"><ExternalLink size={15} /> Visualizar PDF</a>}
+                {activeTerm.previewUrl && <button type="button" disabled={activeTerm.prepareStatus === 'pending'} onClick={() => openPreview(activeTerm)} className="focus-ring inline-flex items-center gap-2 rounded-lg border border-mint px-4 py-2 text-sm font-semibold text-mint hover:bg-emerald-50 disabled:opacity-50"><ExternalLink size={15} /> Visualizar PDF</button>}
                 {terms.length === 1 ? (
                   <button disabled={!activeTerm.draftId || !activeTerm.previewUrl || !providerReady || operationPending || activeTerm.sendStatus === 'success'} onClick={() => sendTerms([activeTerm])} className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50" title={!providerReady ? providerSetupMessage(providerQuery.data) : undefined}><Send size={16} /> {activeTerm.sendStatus === 'pending' ? 'Enviando...' : 'Enviar termo'}</button>
                 ) : (
@@ -608,7 +655,7 @@ function TermStatusIcon({ term }: { term: TermFormState }) {
   return <span className={`h-1.5 w-1.5 rounded-full ${termComplete(term) ? 'bg-b24-blue' : 'bg-zinc-300'}`} />;
 }
 
-function TermsReview({ terms, providerReady, providerLocal, pending, allPrepared, onBack, onEdit, onPrepare, onSend, onRetry }: {
+function TermsReview({ terms, providerReady, providerLocal, pending, allPrepared, onBack, onEdit, onPrepare, onSend, onRetry, onOpenPreview, onOpenConversation }: {
   terms: TermFormState[];
   providerReady: boolean;
   providerLocal: boolean;
@@ -619,6 +666,8 @@ function TermsReview({ terms, providerReady, providerLocal, pending, allPrepared
   onPrepare: () => void;
   onSend: () => void;
   onRetry: () => void;
+  onOpenPreview: (term: TermFormState) => void;
+  onOpenConversation: (term: TermFormState) => void;
 }) {
   const failed = terms.filter((term) => term.sendStatus === 'error').length;
   const sent = terms.filter((term) => term.sendStatus === 'success').length;
@@ -635,7 +684,8 @@ function TermsReview({ terms, providerReady, providerLocal, pending, allPrepared
               {(term.prepareError || term.sendError) && <span className="mt-1 block text-xs text-coral">{term.sendError || term.prepareError}</span>}
             </div>
             <div className="flex items-center gap-1.5 sm:justify-end">
-              {term.previewUrl && <a href={term.previewUrl} target="_blank" rel="noreferrer" className="focus-ring rounded p-2 text-b24-blue-dark hover:bg-sky-50" title="Visualizar PDF"><ExternalLink size={15} /></a>}
+              {term.sendStatus !== 'success' && term.previewUrl && <button type="button" disabled={pending} onClick={() => onOpenPreview(term)} aria-label={`Visualizar PDF de ${term.name}`} className="focus-ring rounded p-2 text-b24-blue-dark hover:bg-sky-50 disabled:opacity-50" title="Visualizar PDF"><Eye size={15} /></button>}
+              {!providerLocal && term.sendStatus === 'success' && <button type="button" onClick={() => onOpenConversation(term)} aria-label={`Abrir conversa de ${term.name} no Bitrix24`} className="focus-ring rounded p-2 text-b24-blue-dark hover:bg-sky-50" title="Abrir conversa no Bitrix24"><ExternalLink size={15} /></button>}
               {providerLocal && term.localSigningUrl && <a href={term.localSigningUrl} target="_blank" rel="noreferrer" className="focus-ring rounded p-2 text-b24-blue-dark hover:bg-sky-50" title="Abrir assinatura"><Eye size={15} /></a>}
               {term.sendStatus !== 'success' && <button type="button" disabled={pending} onClick={() => onEdit(term)} className="focus-ring rounded p-2 text-steel hover:bg-b24-bg" title="Editar termo"><Pencil size={15} /></button>}
             </div>

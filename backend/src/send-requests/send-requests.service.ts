@@ -327,6 +327,23 @@ export class SendRequestsService {
     return { request: updated, previewUrl: await this.storage.createSignedUrl(path, 300, false) };
   }
 
+  async previewUrl(id: string) {
+    const request = await this.prisma.sendRequest.findUnique({
+      where: { id },
+      select: { removedAt: true, unsignedStoragePath: true }
+    });
+    if (!request || request.removedAt) {
+      throw new NotFoundException('Solicitacao de envio nao encontrada');
+    }
+    if (!request.unsignedStoragePath) {
+      throw new BadRequestException('Gere a previa antes de visualizar o PDF');
+    }
+    return {
+      previewUrl: await this.storage.createSignedUrl(request.unsignedStoragePath, 300, false),
+      expiresIn: 300
+    };
+  }
+
   async send(id: string, actorBitrixUserId?: string) {
     const request = await this.prisma.sendRequest.findUnique({
       where: { id },
@@ -465,6 +482,8 @@ export class SendRequestsService {
       await this.notifications.notifySent(signature.id, id, request.employee.nome);
       return {
         ...updatedRequest,
+        chatMessageId: String(chatMessageId),
+        chatRecipientBitrixUserId: String(signerUserId),
         selfSigningUrl: signingUrlForCurrentUser(signingUrl, signerUserId, actorBitrixUserId)
       };
     } catch (error) {
@@ -566,11 +585,24 @@ export class SendRequestsService {
         equipment: { orderBy: { itemNumber: 'asc' } },
         notificationRecipients: { orderBy: { name: 'asc' } },
         templateVersion: { include: { template: true } },
-        signatures: true
+        signatures: {
+          include: {
+            invitation: {
+              select: { bitrixUserId: true, chatMessageId: true }
+            }
+          }
+        }
       }
     });
     if (!request || request.removedAt) throw new NotFoundException('Solicitacao de envio nao encontrada');
-    return request;
+    const invitation = request.signatures
+      .map((signature) => signature.invitation)
+      .find((item) => item?.chatMessageId);
+    return {
+      ...request,
+      chatMessageId: invitation?.chatMessageId || undefined,
+      chatRecipientBitrixUserId: invitation?.bitrixUserId || undefined
+    };
   }
 
   async removeFromHistory(id: string, actorUserId?: string) {

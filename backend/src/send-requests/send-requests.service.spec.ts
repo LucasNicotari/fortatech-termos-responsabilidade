@@ -76,6 +76,86 @@ describe('SendRequestsService', () => {
     expect(message).toContain('[B]7 dias[/B]');
   });
 
+  it('renova a URL temporaria da previa sem recriar o documento', async () => {
+    const findUnique = jest.fn().mockResolvedValue({
+      removedAt: null,
+      unsignedStoragePath: 'unsigned/request-1/document.pdf'
+    });
+    const createSignedUrl = jest.fn().mockResolvedValue('https://storage.test/fresh-preview');
+    const service = new SendRequestsService(
+      { sendRequest: { findUnique } } as never,
+      {} as never,
+      {} as never,
+      { createSignedUrl } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+
+    await expect(service.previewUrl('request-1')).resolves.toEqual({
+      previewUrl: 'https://storage.test/fresh-preview',
+      expiresIn: 300
+    });
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: 'request-1' },
+      select: { removedAt: true, unsignedStoragePath: true }
+    });
+    expect(createSignedUrl).toHaveBeenCalledWith(
+      'unsigned/request-1/document.pdf',
+      300,
+      false
+    );
+  });
+
+  it('nao emite URL de previa antes de o PDF existir', async () => {
+    const service = new SendRequestsService(
+      {
+        sendRequest: {
+          findUnique: jest.fn().mockResolvedValue({ removedAt: null, unsignedStoragePath: null })
+        }
+      } as never,
+      {} as never,
+      {} as never,
+      { createSignedUrl: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+
+    await expect(service.previewUrl('request-1'))
+      .rejects.toThrow('Gere a previa antes de visualizar o PDF');
+  });
+
+  it('recupera o destino e a mensagem do chat ao reconciliar um envio', async () => {
+    const service = new SendRequestsService(
+      {
+        sendRequest: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'request-1',
+            removedAt: null,
+            signatures: [{
+              invitation: { bitrixUserId: '8117', chatMessageId: '4675835' }
+            }]
+          })
+        }
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+
+    await expect(service.findOne('request-1')).resolves.toEqual(expect.objectContaining({
+      chatRecipientBitrixUserId: '8117',
+      chatMessageId: '4675835'
+    }));
+  });
+
   it('retorna erro de negocio quando o CPF pertence a outro colaborador', async () => {
     const prisma = {
       employee: {

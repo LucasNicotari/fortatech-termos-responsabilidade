@@ -1,15 +1,5 @@
 import { useEffect } from 'react';
 
-declare global {
-  interface Window {
-    BX24?: {
-      init: (callback: () => void) => void;
-      fitWindow: (callback?: () => void) => void;
-      setTitle?: (title: string) => void;
-    };
-  }
-}
-
 export function BitrixFrameSync() {
   useEffect(() => {
     if (window.self === window.top || !window.BX24) return;
