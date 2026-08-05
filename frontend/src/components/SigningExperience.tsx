@@ -176,7 +176,7 @@ export function SigningExperience({
   if (session.finished) {
     return (
       <CenteredMessage
-        icon={<CheckCircle2 className="text-b24-green" size={46} />}
+        icon={<CheckCircle2 className="text-emerald-600" size={46} />}
         title="Assinatura concluída"
         message={completionMessage(session, local)}
         action={session.downloadUrl
@@ -189,7 +189,7 @@ export function SigningExperience({
   return (
     <main className="min-h-screen bg-b24-bg p-2 sm:p-4">
       <div className="mx-auto max-w-6xl overflow-hidden rounded-xl border border-b24-border bg-surface shadow-sm">
-        <header className="flex items-center gap-3 border-t-[3px] border-t-b24-blue px-4 py-3 sm:px-5">
+        <header className="flex items-center gap-3 px-4 py-3 sm:px-5">
           <FortaTechMark className="h-9 w-9" />
           <div className="min-w-0">
             <p className="font-extrabold leading-none tracking-tight"><span className="text-[#ed1c24]">Forta</span><span className="text-ink">Docs</span></p>

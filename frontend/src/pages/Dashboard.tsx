@@ -33,7 +33,7 @@ export function Dashboard() {
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div><h1 className="text-xl font-bold tracking-tight text-ink">Visão geral</h1><p className="mt-0.5 text-xs text-steel">Resumo do que exige acompanhamento agora.</p></div>
         <div className="flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 text-xs text-steel sm:flex"><span className="h-2 w-2 rounded-full bg-b24-green" /> {updatedAt ? `Atualizado às ${updatedAt}` : 'Dados atualizados'}</span>
+          <span className="hidden items-center gap-1.5 text-xs text-steel sm:flex"><span className="h-2 w-2 rounded-full bg-emerald-600" /> {updatedAt ? `Atualizado às ${updatedAt}` : 'Dados atualizados'}</span>
           <button onClick={() => refetch()} disabled={isFetching} aria-label="Atualizar dashboard" title="Atualizar dashboard" className="focus-ring grid h-9 w-9 place-items-center rounded border border-b24-border bg-surface text-steel hover:bg-sky-50 hover:text-b24-blue-dark disabled:opacity-60"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} /></button>
           {user?.canOperate && <Link to="/send-requests" className="focus-ring inline-flex h-9 items-center gap-2 rounded bg-b24-blue px-3.5 text-sm font-semibold text-white hover:bg-b24-blue-dark"><FilePlus2 size={17} /> Novo termo</Link>}
         </div>
@@ -58,7 +58,7 @@ export function Dashboard() {
               </Link>
             ))}
           </div>
-        ) : <div className="grid min-h-28 flex-1 place-items-center px-5 py-5 text-center"><div><CheckCircle2 size={24} className="mx-auto mb-2 text-b24-green" /><p className="text-sm font-medium text-ink">Nenhum termo movimentado</p><p className="mt-0.5 text-[11px] text-steel">Os documentos enviados aparecerão aqui.</p>{user?.canOperate && <Link to="/send-requests" className="focus-ring mt-3 inline-flex items-center gap-1.5 rounded-lg bg-b24-blue px-3 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><FilePlus2 size={14} /> Criar primeiro termo</Link>}</div></div>}
+        ) : <div className="grid min-h-28 flex-1 place-items-center px-5 py-5 text-center"><div><CheckCircle2 size={24} className="mx-auto mb-2 text-emerald-600" /><p className="text-sm font-medium text-ink">Nenhum termo movimentado</p><p className="mt-0.5 text-[11px] text-steel">Os documentos enviados aparecerão aqui.</p>{user?.canOperate && <Link to="/send-requests" className="focus-ring mt-3 inline-flex items-center gap-1.5 rounded-lg bg-b24-blue px-3 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><FilePlus2 size={14} /> Criar primeiro termo</Link>}</div></div>}
         <div className="border-t border-b24-border bg-b24-bg/40 px-4 py-2.5 text-right sm:hidden"><Link to="/terms" className="text-xs font-semibold text-b24-blue-dark">Abrir Termos</Link></div>
       </article>
     </section>

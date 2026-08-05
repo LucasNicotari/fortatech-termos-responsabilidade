@@ -51,7 +51,7 @@ export function PageShell() {
   return (
     <div className="fortadocs-shell min-h-screen overflow-x-hidden bg-b24-bg">
       <BitrixFrameSync />
-      <header className="sticky top-0 z-30 border-t-[3px] border-t-mint bg-surface/95 shadow-[0_2px_14px_rgba(23,34,45,0.08)] backdrop-blur-md">
+      <header className="sticky top-0 z-30 bg-surface/95 shadow-[0_2px_14px_rgba(23,34,45,0.08)] backdrop-blur-md">
         <div className="mx-auto max-w-[1600px] px-3 sm:px-5 lg:px-7">
           <div className="relative flex min-h-[58px] items-center gap-3 lg:gap-5">
             <Link to="/" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FortaDocs - Dashboard">
@@ -100,7 +100,7 @@ export function PageShell() {
 
               {profileOpen && (
                 <div role="menu" className="absolute right-0 top-[calc(100%+10px)] w-[290px] overflow-hidden rounded-xl border border-b24-border bg-surface shadow-[0_18px_45px_rgba(82,92,105,0.22)]">
-                  <div className="border-b border-b24-border bg-gradient-to-br from-sky-50 to-surface px-4 py-3.5">
+                  <div className="border-b border-b24-border bg-b24-bg/40 px-4 py-3.5">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink">{user?.name}</p>
                       <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-b24-blue-dark">{role}</p>
@@ -160,7 +160,7 @@ function PrimaryLink({ to, label, icon: Icon }: (typeof primaryItems)[number]) {
       className={({ isActive }) =>
         `focus-ring flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
           isActive
-            ? 'bg-sky-50 text-b24-blue-dark shadow-[inset_0_-2px_0_#2fc6f6]'
+            ? 'bg-sky-50 text-b24-blue-dark'
             : 'text-steel hover:bg-b24-bg hover:text-ink'
         }`
       }

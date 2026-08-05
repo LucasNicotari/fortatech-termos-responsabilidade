@@ -9,15 +9,12 @@ export default {
         surface: 'rgb(var(--color-surface) / <alpha-value>)',
         ink: 'rgb(var(--color-ink) / <alpha-value>)',
         steel: 'rgb(var(--color-steel) / <alpha-value>)',
-        mint: '#2fc6f6',
-        amber: '#f5a623',
         coral: '#ff5752',
         b24: {
           bg: 'rgb(var(--color-bg) / <alpha-value>)',
           border: 'rgb(var(--color-border) / <alpha-value>)',
-          blue: 'rgb(var(--color-primary) / <alpha-value>)',
-          'blue-dark': 'rgb(var(--color-blue-dark) / <alpha-value>)',
-          green: '#9dcf00'
+          blue: '#2fc6f6',
+          'blue-dark': 'rgb(var(--color-blue-dark) / <alpha-value>)'
         }
       }
     }
