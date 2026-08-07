@@ -2,7 +2,7 @@ import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Download, ExternalLink, FilePlus2, FileText, Package, RefreshCw, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { api } from '../services/api';
+import { api, apiErrorMessage } from '../services/api';
 import { SendRequest, Signature } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatDate } from '../utils/format';
@@ -106,6 +106,15 @@ export function Signatures() {
   const retryArchive = useMutation({
     mutationFn: (signatureId: string) => api.post(`/signatures/${signatureId}/archive/retry`),
     onSuccess: invalidateTerms
+  });
+  const retrySend = useMutation({
+    mutationFn: async (requestId: string) => {
+      await api.post(`/send-requests/${requestId}/retry`);
+      await api.post(`/send-requests/${requestId}/preview`);
+      return api.post(`/send-requests/${requestId}/send`);
+    },
+    onSuccess: invalidateTerms,
+    onError: invalidateTerms
   });
   const removeHistory = useMutation({
     mutationFn: (ids: string[]) => api.post('/send-requests/bulk-remove', { ids }),
@@ -324,10 +333,27 @@ export function Signatures() {
                           <Detail label="Provedor" value={signature ? (localMode ? 'Simulação local' : signature.provider === 'ZAPSIGN' ? 'ZapSign' : 'Bitrix24') : 'Ainda não enviado'} />
                           <Detail label="Arquivamento" value={archiveLabel(signature)} error={signature?.archiveStatus === 'FAILED'} />
                         </div>
-                        {signature && <SignatureActions signature={signature} localMode={localMode} canOperate={canOperate} onSync={() => refresh.mutate(signature.id)} onRetry={() => retry.mutate(signature.id)} onRetryArchive={() => retryArchive.mutate(signature.id)} onDownload={() => download(signature.id)} />}
+                        {signature ? (
+                          <SignatureActions signature={signature} localMode={localMode} canOperate={canOperate} onSync={() => refresh.mutate(signature.id)} onRetry={() => retry.mutate(signature.id)} onRetryArchive={() => retryArchive.mutate(signature.id)} onDownload={() => download(signature.id)} />
+                        ) : canOperate && request.status === 'FAILED' ? (
+                          <button
+                            type="button"
+                            disabled={retrySend.isPending}
+                            onClick={() => retrySend.mutate(request.id)}
+                            className="focus-ring inline-flex items-center gap-1.5 rounded border border-coral/50 bg-surface px-2.5 py-2 text-xs font-semibold text-coral transition hover:border-coral hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
+                          >
+                            <RotateCcw size={14} className={retrySend.isPending && retrySend.variables === request.id ? 'animate-spin' : ''} />
+                            {retrySend.isPending && retrySend.variables === request.id ? 'Enviando...' : 'Tentar envio'}
+                          </button>
+                        ) : null}
                       </div>
                       {!!request.equipment?.length && <div className="mt-4 flex flex-wrap gap-2">{request.equipment.map((item, index) => <span key={item.id || index} className="rounded-full border border-b24-border/60 bg-surface px-2.5 py-1 text-xs text-steel dark:border-white/[0.05] dark:bg-white/[0.025]">{item.quantity}× {item.description}{item.assetTag ? ` · Patrimônio ${item.assetTag}` : ''}</span>)}</div>}
                       {(request.failureReason || signature?.archiveError) && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-xs text-coral">{request.failureReason || signature?.archiveError}</p>}
+                      {retrySend.isError && retrySend.variables === request.id && (
+                        <p role="alert" className="mt-2 text-xs font-medium text-coral">
+                          {apiErrorMessage(retrySend.error, 'A nova tentativa de envio também falhou.')}
+                        </p>
+                      )}
                     </div>
                   )}
                 </article>
@@ -390,7 +416,7 @@ function SignatureActions({ signature, localMode, canOperate, onSync, onRetry, o
       {canOperate && localMode && signature.providerDocumentId && !finished && <a href={`/assinar/${encodeURIComponent(signature.providerDocumentId)}`} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-surface px-2.5 py-2 text-xs font-medium text-b24-blue-dark hover:bg-sky-50"><ExternalLink size={14} /> Abrir assinatura</a>}
       {canOperate && !finished && <button onClick={onSync} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-surface px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RefreshCw size={14} /> Atualizar</button>}
       {canOperate && retryable && <button onClick={onRetry} className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-surface px-2.5 py-2 text-xs font-medium text-steel hover:bg-zinc-50"><RotateCcw size={14} /> Tentar novamente</button>}
-      {canOperate && signature.status === 'SIGNED' && ['PENDING', 'FAILED'].includes(signature.archiveStatus || '') && <button onClick={onRetryArchive} className="focus-ring inline-flex items-center gap-1.5 rounded border border-red-200 bg-surface px-2.5 py-2 text-xs font-medium text-coral hover:bg-red-50"><RotateCcw size={14} /> Salvar no Drive</button>}
+      {canOperate && signature.status === 'SIGNED' && ['PENDING', 'FAILED'].includes(signature.archiveStatus || '') && <button onClick={onRetryArchive} className="focus-ring inline-flex items-center gap-1.5 rounded border border-coral/50 bg-surface px-2.5 py-2 text-xs font-semibold text-coral transition hover:border-coral hover:bg-red-50"><RotateCcw size={14} /> Tentar salvar</button>}
       {signature.archiveStatus === 'ARCHIVED' && signature.bitrixDriveDetailUrl && <a href={signature.bitrixDriveDetailUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-1.5 rounded border border-b24-border bg-surface px-2.5 py-2 text-xs font-medium text-b24-blue-dark hover:bg-sky-50"><ExternalLink size={14} /> Abrir no Drive</a>}
       {signature.archiveStatus === 'ARCHIVED' && <button onClick={onDownload} className="focus-ring inline-flex items-center gap-1.5 rounded bg-b24-blue px-2.5 py-2 text-xs font-semibold text-white hover:bg-b24-blue-dark"><Download size={14} /> Baixar PDF</button>}
     </div>
