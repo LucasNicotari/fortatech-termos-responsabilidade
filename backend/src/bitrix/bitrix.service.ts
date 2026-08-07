@@ -273,7 +273,7 @@ export class BitrixService {
     }
     if (!folderName) throw new Error('BITRIX_DRIVE_FOLDER_NAME nao configurado');
 
-    const storage = await this.resolveUserDriveStorage(ownerUserId);
+    const storage = await this.resolveUserDriveStorageWithAdministrativeRecovery(ownerUserId);
     const folder = await this.ensureDriveFolder(storage.ROOT_OBJECT_ID, folderName);
     const archiveFileName = driveArchiveFileName(fileName, idempotencyKey, pdf);
     const existing = await this.findDriveFile(folder.ID, archiveFileName);
@@ -604,6 +604,27 @@ export class BitrixService {
     }
     this.cacheDriveStorage(ownerUserId, storage);
     return storage;
+  }
+
+  private async resolveUserDriveStorageWithAdministrativeRecovery(ownerUserId: string) {
+    try {
+      return await this.resolveUserDriveStorage(ownerUserId);
+    } catch (error) {
+      if (!(error instanceof Error) || !/Drive do usuario Bitrix24 .* nao esta disponivel/i.test(error.message)) {
+        throw error;
+      }
+
+      // Recupera instalacoes antigas em que uma abertura do iframe chegou a
+      // substituir o access token administrativo por um token de colaborador.
+      const installation = await this.prisma.bitrixInstallation.findFirst({
+        where: { active: true },
+        orderBy: { updatedAt: 'desc' }
+      });
+      if (!installation) throw error;
+      await this.refreshInstallation(installation);
+      this.driveStorageCache.delete(ownerUserId);
+      return this.resolveUserDriveStorage(ownerUserId);
+    }
   }
 
   private isUserDriveStorage(storage: BitrixDiskStorage | undefined, ownerUserId: string) {

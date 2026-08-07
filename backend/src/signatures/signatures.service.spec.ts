@@ -1,4 +1,4 @@
-import { SendRequestStatus, SignatureStatus } from '@prisma/client';
+import { ArchiveStatus, SendRequestStatus, SignatureProvider, SignatureStatus } from '@prisma/client';
 import { PDFDocument } from 'pdf-lib';
 import {
   findCenteredSignatureLineY,
@@ -108,5 +108,31 @@ describe('SignaturesService status mapping', () => {
 
     expect(maximum).toBe(2);
     expect(results).toEqual([2, 4, 6, 8, 10, 12]);
+  });
+});
+
+describe('SignaturesService Drive recovery', () => {
+  it('reprocesses signed FortaDocs PDFs that are pending or failed', async () => {
+    const prisma = {
+      signature: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'signature-1' }, { id: 'signature-2' }])
+      }
+    };
+    const service = new SignaturesService(
+      prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never
+    );
+    const archive = jest.spyOn(service as any, 'archiveFortaDocsToBitrixDrive').mockResolvedValue({});
+
+    await (service as any).recoverPendingFortaDocsArchives();
+
+    expect(prisma.signature.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        provider: SignatureProvider.FORTADOCS,
+        status: SignatureStatus.SIGNED,
+        archiveStatus: { in: [ArchiveStatus.PENDING, ArchiveStatus.FAILED] }
+      }),
+      take: 10
+    }));
+    expect(archive.mock.calls.map(([id]) => id)).toEqual(['signature-1', 'signature-2']);
   });
 });

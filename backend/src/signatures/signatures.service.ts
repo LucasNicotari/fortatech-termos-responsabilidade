@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { ArchiveStatus, Prisma, SendRequestStatus, SignatureMethod, SignatureProvider, SignatureStatus, WebhookProcessingStatus } from '@prisma/client';
 import { createHash } from 'crypto';
 import { firstValueFrom } from 'rxjs';
@@ -36,7 +36,12 @@ const STATUS_MAP: Record<string, SignatureStatus> = {
 };
 
 @Injectable()
-export class SignaturesService {
+export class SignaturesService implements OnApplicationBootstrap, OnModuleDestroy {
+  private readonly logger = new Logger(SignaturesService.name);
+  private archiveInitialRecoveryTimer?: NodeJS.Timeout;
+  private archiveRecoveryTimer?: NodeJS.Timeout;
+  private archiveRecoveryRunning = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly bitrix: BitrixService,
@@ -45,6 +50,21 @@ export class SignaturesService {
     private readonly zapSign: ZapSignService,
     private readonly notifications: TermNotificationsService
   ) {}
+
+  onApplicationBootstrap() {
+    const recover = () => void this.recoverPendingFortaDocsArchives().catch((error) => {
+      this.logger.error(`Falha na reconciliacao automatica do Drive: ${error instanceof Error ? error.message : 'erro desconhecido'}`);
+    });
+    this.archiveInitialRecoveryTimer = setTimeout(recover, 5_000);
+    this.archiveInitialRecoveryTimer.unref();
+    this.archiveRecoveryTimer = setInterval(recover, 5 * 60_000);
+    this.archiveRecoveryTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.archiveInitialRecoveryTimer) clearTimeout(this.archiveInitialRecoveryTimer);
+    if (this.archiveRecoveryTimer) clearInterval(this.archiveRecoveryTimer);
+  }
 
   async findOne(id: string) {
     const result = await this.prisma.signature.findUnique({
@@ -645,6 +665,30 @@ export class SignaturesService {
       ]);
     }
     return this.findOne(id);
+  }
+
+  private async recoverPendingFortaDocsArchives() {
+    if (this.archiveRecoveryRunning) return;
+    this.archiveRecoveryRunning = true;
+    try {
+      const signatures = await this.prisma.signature.findMany({
+        where: {
+          provider: SignatureProvider.FORTADOCS,
+          status: SignatureStatus.SIGNED,
+          archiveStatus: { in: [ArchiveStatus.PENDING, ArchiveStatus.FAILED] },
+          signedStoragePath: { not: null },
+          updatedAt: { lt: new Date(Date.now() - 60_000) }
+        },
+        orderBy: { updatedAt: 'asc' },
+        take: 10,
+        select: { id: true }
+      });
+      for (const signature of signatures) {
+        await this.archiveFortaDocsToBitrixDrive(signature.id);
+      }
+    } finally {
+      this.archiveRecoveryRunning = false;
+    }
   }
 
   private async archiveBitrix(id: string) {

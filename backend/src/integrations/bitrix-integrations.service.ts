@@ -118,14 +118,10 @@ export class BitrixIntegrationsService {
       throw new UnauthorizedException('Instalacao Bitrix24 nao reconhecida');
     }
     const bitrixUser = await this.bitrix.getCurrentUser(auth.accessToken, installation.clientEndpoint);
-    await this.prisma.bitrixInstallation.update({
-      where: { id: installation.id },
-      data: {
-        accessTokenEncrypted: this.crypto.encrypt(auth.accessToken),
-        expiresAt: new Date(Date.now() + 55 * 60_000),
-        active: true
-      }
-    });
+    // AUTH_ID pertence ao usuario que abriu o iframe. Ele serve apenas para
+    // identificar e autorizar essa sessao; persistir esse token substituiria a
+    // credencial administrativa da instalacao e faria tarefas de servidor
+    // (como arquivar no Drive configurado) herdarem as permissoes do colaborador.
     const code = randomBytes(32).toString('base64url');
     const signingToken = this.signingTokenFromPlacement(payload);
     if (signingToken) {

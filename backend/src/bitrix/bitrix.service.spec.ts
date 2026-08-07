@@ -239,6 +239,22 @@ describe('BitrixService sign.b2e', () => {
     expect(call).toHaveBeenNthCalledWith(2, 'disk.storage.getlist', { start: 0 });
   });
 
+  it('refreshes the administrative OAuth token when a collaborator token cannot see the configured Drive', async () => {
+    const installation = { id: 'installation-1', memberId: 'member-1', active: true };
+    const prisma = { bitrixInstallation: { findFirst: jest.fn().mockResolvedValue(installation) } };
+    const service = new BitrixService({} as never, {} as never, prisma as never, {} as never, {} as never);
+    const resolve = jest.spyOn(service as any, 'resolveUserDriveStorage')
+      .mockRejectedValueOnce(new Error('Drive do usuario Bitrix24 8465 ainda nao esta disponivel para o aplicativo'))
+      .mockResolvedValueOnce({ ID: '55', ENTITY_TYPE: 'user', ENTITY_ID: '8465', ROOT_OBJECT_ID: '100' });
+    const refresh = jest.spyOn(service as any, 'refreshInstallation').mockResolvedValue(installation);
+
+    await expect((service as any).resolveUserDriveStorageWithAdministrativeRecovery('8465'))
+      .resolves.toEqual(expect.objectContaining({ ID: '55' }));
+
+    expect(refresh).toHaveBeenCalledWith(installation);
+    expect(resolve).toHaveBeenCalledTimes(2);
+  });
+
   it('reconciles an ambiguous upload response without creating a duplicate PDF', async () => {
     const config = { get: (key: string) => key === 'BITRIX_DRIVE_OWNER_USER_ID' ? '8465' : undefined };
     const service = new BitrixService({} as never, config as never, {} as never, {} as never, {} as never);

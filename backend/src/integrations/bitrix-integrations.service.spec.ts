@@ -186,3 +186,44 @@ describe('BitrixIntegrationsService installation', () => {
     expect(bitrix.ensureRestAppUriPlacement).toHaveBeenCalled();
   });
 });
+
+describe('BitrixIntegrationsService launch authorization', () => {
+  it('does not replace the administrative installation token with the iframe user token', async () => {
+    const installationWithEndpoint = {
+      id: 'installation-1', memberId: 'member-1', domain: 'company.bitrix24.com',
+      clientEndpoint: 'https://company.bitrix24.com/rest/', active: true
+    };
+    const prisma = {
+      bitrixInstallation: {
+        findUnique: jest.fn().mockResolvedValue(installationWithEndpoint),
+        update: jest.fn()
+      },
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'user-1', active: true }) },
+      bitrixLaunchCode: { create: jest.fn().mockResolvedValue({ id: 'launch-1' }) }
+    };
+    const bitrix = {
+      getCurrentUser: jest.fn().mockResolvedValue({ ID: '8117', NAME: 'Rafael' })
+    };
+    const config = { get: (key: string) => {
+      if (key === 'BITRIX_PORTAL_ORIGIN') return 'https://company.bitrix24.com';
+      if (key === 'FRONTEND_URL') return 'https://frontend.example.com';
+      return undefined;
+    } };
+    const service = new BitrixIntegrationsService(
+      prisma as never, bitrix as never, { encrypt: jest.fn() } as never,
+      config as never, {} as never
+    );
+
+    await service.createLaunch({
+      AUTH_ID: 'collaborator-access-token',
+      member_id: 'member-1',
+      DOMAIN: 'company.bitrix24.com'
+    });
+
+    expect(bitrix.getCurrentUser).toHaveBeenCalledWith(
+      'collaborator-access-token', 'https://company.bitrix24.com/rest/'
+    );
+    expect(prisma.bitrixInstallation.update).not.toHaveBeenCalled();
+    expect(prisma.bitrixLaunchCode.create).toHaveBeenCalled();
+  });
+});
