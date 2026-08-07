@@ -29,6 +29,16 @@ export interface BitrixDepartment {
   PARENT?: string;
 }
 
+export interface BitrixDialogMessage {
+  id: number;
+  unread?: boolean;
+}
+
+export interface BitrixDialogMessagesResult {
+  chat_id: number;
+  messages: BitrixDialogMessage[];
+}
+
 export interface BitrixEventHandler {
   event: string;
   handler: string;

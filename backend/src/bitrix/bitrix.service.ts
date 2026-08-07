@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   BitrixCompanyProvider,
   BitrixDepartment,
+  BitrixDialogMessagesResult,
   BitrixDiskObject,
   BitrixDiskStorage,
   BitrixDocumentResult,
@@ -229,13 +230,37 @@ export class BitrixService {
     });
   }
 
-  sendChatMessage(userId: number, message: string) {
-    return this.call<number>('im.message.add', {
+  async sendChatMessage(userId: number, message: string) {
+    const messageId = await this.call<number>('im.message.add', {
       DIALOG_ID: String(userId),
       MESSAGE: message,
       SYSTEM: 'N',
       URL_PREVIEW: 'N'
     });
+
+    if (!Number.isInteger(Number(messageId)) || Number(messageId) <= 0) {
+      throw new Error('O Bitrix24 não retornou um identificador válido para a mensagem do chat');
+    }
+
+    const confirmed = await this.confirmChatMessage(userId, Number(messageId));
+    if (!confirmed) {
+      throw new Error('O Bitrix24 aceitou o envio, mas não confirmou a mensagem no chat do colaborador');
+    }
+
+    return Number(messageId);
+  }
+
+  private async confirmChatMessage(userId: number, messageId: number) {
+    const delays = [0, 250, 750];
+    for (const delay of delays) {
+      if (delay) await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      const dialog = await this.call<BitrixDialogMessagesResult>(
+        'im.dialog.messages.get',
+        { DIALOG_ID: String(userId), LIMIT: 50 }
+      );
+      if (dialog?.messages?.some((message) => Number(message.id) === messageId)) return true;
+    }
+    return false;
   }
 
   async archiveResponsibilityTerm(pdf: Buffer, fileName: string, idempotencyKey?: string) {

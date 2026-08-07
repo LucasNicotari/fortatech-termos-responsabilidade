@@ -101,6 +101,28 @@ describe('BitrixService sign.b2e', () => {
     );
   });
 
+  it('only confirms a chat send after the message appears in the recipient dialog', async () => {
+    const service = new BitrixService({} as never, {} as never, {} as never, {} as never, {} as never);
+    const call = jest.spyOn(service, 'call').mockResolvedValueOnce(4687699);
+    jest.spyOn(service as any, 'confirmChatMessage').mockResolvedValue(true);
+
+    await expect(service.sendChatMessage(8325, 'Convite')).resolves.toBe(4687699);
+
+    expect(call).toHaveBeenCalledWith('im.message.add', {
+      DIALOG_ID: '8325', MESSAGE: 'Convite', SYSTEM: 'N', URL_PREVIEW: 'N'
+    });
+  });
+
+  it('rejects a chat send that Bitrix accepted but did not persist in the dialog', async () => {
+    const service = new BitrixService({} as never, {} as never, {} as never, {} as never, {} as never);
+    jest.spyOn(service, 'call').mockResolvedValueOnce(4687699);
+    jest.spyOn(service as any, 'confirmChatMessage').mockResolvedValue(false);
+
+    await expect(service.sendChatMessage(8325, 'Convite')).rejects.toThrow(
+      'não confirmou a mensagem no chat do colaborador'
+    );
+  });
+
   it('sends the PDF with signer, representative and responsible through native B2E', async () => {
     const service = new BitrixService({} as never, {} as never, {} as never, {} as never, {} as never);
     const call = jest.spyOn(service, 'call').mockResolvedValue({

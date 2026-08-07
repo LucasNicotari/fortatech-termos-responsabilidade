@@ -13,7 +13,9 @@ export default {
         b24: {
           bg: 'rgb(var(--color-bg) / <alpha-value>)',
           border: 'rgb(var(--color-border) / <alpha-value>)',
-          blue: '#2fc6f6',
+          // Bitrix cyan remains the visual reference, with enough depth for
+          // white labels and controls to stay legible in both themes.
+          blue: '#007da6',
           'blue-dark': 'rgb(var(--color-blue-dark) / <alpha-value>)'
         }
       }

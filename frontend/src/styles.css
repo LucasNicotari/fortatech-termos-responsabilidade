@@ -8,7 +8,7 @@
   --color-border: 223 227 232;
   --color-ink: 49 58 68;
   --color-steel: 82 92 105;
-  --color-blue-dark: 25 169 213;
+  --color-blue-dark: 0 105 143;
 }
 
 :root.dark {

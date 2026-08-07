@@ -406,7 +406,7 @@ export class SendRequestsService {
           templateVersionId: request.templateVersionId,
           provider: SignatureProvider.FORTADOCS,
           status: SignatureStatus.SENT,
-          rawStatusCode: 'chat-sent',
+          rawStatusCode: 'chat-delivery-pending',
           bitrixStage: 'Aguardando assinatura do colaborador no FortaDocs',
           sentAt: new Date(),
           lastSyncedAt: new Date(),
@@ -436,6 +436,10 @@ export class SendRequestsService {
         where: { id: signature.invitation!.id },
         data: { chatMessageId: String(chatMessageId) }
       });
+      await this.prisma.signature.update({
+        where: { id: signature.id },
+        data: { rawStatusCode: 'chat-delivery-confirmed', lastSyncedAt: new Date() }
+      });
       let signerNotificationId: number | false | null = null;
       try {
         signerNotificationId = await this.bitrix.sendPersonalNotification({
@@ -459,7 +463,13 @@ export class SendRequestsService {
           eventType: 'FORTADOCS_CHAT_SENT',
           status: SignatureStatus.SENT,
           bitrixStage: 'Aguardando assinatura do colaborador no FortaDocs',
-          payload: { bitrixUserId: signerUserId, chatMessageId, signerNotificationId, expiresInDays: 7 }
+          payload: {
+            bitrixUserId: signerUserId,
+            chatMessageId,
+            chatDeliveryConfirmed: true,
+            signerNotificationId,
+            expiresInDays: 7
+          }
         }
       });
       await this.prisma.sendAttempt.update({
@@ -470,7 +480,7 @@ export class SendRequestsService {
           providerResponse: this.toJson({
             provider: 'FORTADOCS',
             chatMessageId,
-            status: 'SENT'
+            status: 'DELIVERY_CONFIRMED'
           })
         }
       });
@@ -483,6 +493,7 @@ export class SendRequestsService {
       return {
         ...updatedRequest,
         chatMessageId: String(chatMessageId),
+        chatDeliveryConfirmed: true,
         chatRecipientBitrixUserId: String(signerUserId),
         selfSigningUrl: signingUrlForCurrentUser(signingUrl, signerUserId, actorBitrixUserId)
       };

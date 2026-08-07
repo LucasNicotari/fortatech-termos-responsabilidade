@@ -377,9 +377,16 @@ export function SendRequests() {
           <h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">Envio de termo</h1>
           <p className="mt-0.5 text-sm text-steel">Preencha em três etapas rápidas.</p>
         </div>
-        <Link to="/terms" className="focus-ring text-sm font-semibold text-b24-blue-dark hover:underline">
-          Ver todos os termos
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link to="/terms" className="focus-ring rounded-md px-2 py-1.5 text-sm font-semibold text-ink hover:bg-b24-bg">
+            Ver todos os termos
+          </Link>
+          {showResult && (
+            <button type="button" onClick={startNewSend} className="focus-ring inline-flex items-center gap-1 rounded-md border border-b24-border bg-surface px-2.5 py-1.5 text-sm font-semibold text-ink shadow-sm hover:border-b24-blue hover:text-b24-blue-dark">
+              <Plus size={14} /> Termo
+            </button>
+          )}
+        </div>
       </header>
 
       {!showResult && <ProviderNotice provider={providerQuery.data} ready={providerReady} />}
@@ -393,7 +400,6 @@ export function SendRequests() {
             providerQuery.data?.portalUrl
           )}
           pending={operationPending}
-          onNew={startNewSend}
           onEdit={() => {
             setShowResult(false);
             updateTerm(activeTerm.id, { step: termEmployeeComplete(activeTerm) ? 3 : 1 });
@@ -500,19 +506,18 @@ function termComplete(term: TermFormState) {
   return termEmployeeComplete(term) && termEquipmentComplete(term);
 }
 
-function TermResult({ term, providerLocal, conversationUrl, pending, onNew, onEdit, onRetry, onOpenConversation }: {
+function TermResult({ term, providerLocal, conversationUrl, pending, onEdit, onRetry, onOpenConversation }: {
   term: TermFormState;
   providerLocal: boolean;
   conversationUrl?: string;
   pending: boolean;
-  onNew: () => void;
   onEdit: () => void;
   onRetry: () => void;
   onOpenConversation: () => void;
 }) {
   const sent = term.sendStatus === 'success';
   return (
-    <div role="status" aria-live="polite" className={`overflow-hidden rounded-2xl border px-5 py-6 shadow-sm sm:px-7 ${sent ? 'border-emerald-200/70 bg-emerald-50' : 'border-red-200/70 bg-red-50'} dark:border-white/[0.06] dark:bg-surface/70 dark:shadow-[0_18px_46px_rgba(0,0,0,0.16)]`}>
+    <div role="status" aria-live="polite" className={`overflow-hidden rounded-xl border-l-4 bg-surface px-5 py-5 shadow-sm sm:px-6 ${sent ? 'border-y-b24-border border-r-b24-border border-l-emerald-500' : 'border-y-b24-border border-r-b24-border border-l-coral'} dark:border-y-white/[0.08] dark:border-r-white/[0.08] dark:bg-surface/80`}>
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
         <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${sent ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-coral'}`}>
           {sent ? <Check size={22} /> : <AlertCircle size={22} />}
@@ -521,30 +526,29 @@ function TermResult({ term, providerLocal, conversationUrl, pending, onNew, onEd
           <h2 className="text-lg font-semibold text-ink">{sent ? 'Termo enviado com sucesso' : 'Não foi possível enviar o termo'}</h2>
           <p className="mt-1 text-sm text-steel">
             {sent
-              ? `O convite individual de ${term.name} foi enviado ao chat do Bitrix24.`
+              ? `O Bitrix24 confirmou a mensagem no chat de ${term.name}.`
               : term.sendError || term.prepareError || 'Confira os dados e tente novamente.'}
           </p>
           <p className="mt-1 text-xs text-steel">{term.equipment.length} {term.equipment.length === 1 ? 'equipamento vinculado' : 'equipamentos vinculados'}</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
           {sent && !providerLocal && conversationUrl && (
-            <a href={conversationUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50">
+            <a href={conversationUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded-lg border border-b24-border bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-b24-blue hover:text-b24-blue-dark">
               <ExternalLink size={15} /> Abrir conversa
             </a>
           )}
           {sent && !providerLocal && !conversationUrl && (
-            <button type="button" onClick={onOpenConversation} className="focus-ring inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50">
+            <button type="button" onClick={onOpenConversation} className="focus-ring inline-flex items-center gap-2 rounded-lg border border-b24-border bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-b24-blue hover:text-b24-blue-dark">
               <ExternalLink size={15} /> Abrir conversa
             </button>
           )}
           {sent && providerLocal && term.localSigningUrl && (
-            <a href={term.localSigningUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-b24-blue-dark hover:bg-sky-50">
+            <a href={term.localSigningUrl} target="_blank" rel="noreferrer" className="focus-ring inline-flex items-center gap-2 rounded-lg border border-b24-border bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-b24-blue hover:text-b24-blue-dark">
               <Eye size={15} /> Abrir assinatura
             </a>
           )}
           {!sent && <button type="button" disabled={pending} onClick={onEdit} className="focus-ring rounded-lg px-3 py-2 text-sm font-medium text-steel hover:bg-b24-bg disabled:opacity-50">Revisar dados</button>}
           {!sent && <button type="button" disabled={pending} onClick={onRetry} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark disabled:opacity-50"><RotateCcw size={16} /> {pending ? 'Tentando novamente...' : 'Tentar novamente'}</button>}
-          {sent && <button type="button" onClick={onNew} className="focus-ring inline-flex items-center rounded-lg bg-b24-blue px-4 py-2 text-sm font-semibold text-white hover:bg-b24-blue-dark">Enviar novo termo</button>}
         </div>
       </div>
     </div>
@@ -552,7 +556,7 @@ function TermResult({ term, providerLocal, conversationUrl, pending, onNew, onEd
 }
 
 function ProviderNotice({ provider, ready }: { provider?: ProviderStatus; ready: boolean }) {
-  if (!provider?.local && ready) return <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900"><strong>Assinatura no FortaDocs.</strong> O colaborador recebe no chat um link pessoal que abre a assinatura dentro do Bitrix24.</div>;
+  if (!provider?.local && ready) return <div className="mb-3 rounded-lg border border-b24-border border-l-b24-blue bg-surface px-3 py-2 text-xs text-ink shadow-sm"><strong>Assinatura no FortaDocs.</strong> O colaborador recebe no chat um link pessoal que abre a assinatura dentro do Bitrix24.</div>;
   if (provider?.local) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Modo local: envio e assinatura simulados; nenhuma mensagem real será enviada.</div>;
   if (!ready) return <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><strong>Envio indisponível.</strong> {providerSetupMessage(provider)} A prévia do PDF continua disponível.</div>;
   return null;
