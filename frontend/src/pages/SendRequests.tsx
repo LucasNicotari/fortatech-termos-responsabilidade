@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  Sparkles,
   Trash2,
   UserRound,
   X
@@ -517,19 +518,35 @@ function TermResult({ term, providerLocal, conversationUrl, pending, onEdit, onR
 }) {
   const sent = term.sendStatus === 'success';
   return (
-    <div role="status" aria-live="polite" className={`overflow-hidden rounded-xl border-l-4 bg-surface px-5 py-5 shadow-sm sm:px-6 ${sent ? 'border-y-b24-border border-r-b24-border border-l-emerald-500' : 'border-y-b24-border border-r-b24-border border-l-coral'} dark:border-y-white/[0.08] dark:border-r-white/[0.08] dark:bg-surface/80`}>
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${sent ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-coral'}`}>
-          {sent ? <Check size={22} /> : <AlertCircle size={22} />}
+    <div role="status" aria-live="polite" className={`relative overflow-hidden rounded-2xl border px-5 py-5 shadow-sm sm:px-6 ${sent ? 'border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-surface to-sky-50 dark:border-emerald-400/20 dark:from-emerald-950/35 dark:via-surface dark:to-sky-950/25' : 'border-coral/35 bg-surface dark:border-coral/30 dark:bg-surface/80'}`}>
+      {sent && (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+          <span className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-b24-blue/10 blur-2xl" />
+          <span className="absolute right-24 top-4 h-2 w-2 rotate-12 rounded-sm bg-b24-blue/35" />
+          <span className="absolute right-14 top-14 h-1.5 w-1.5 rounded-full bg-emerald-500/50" />
+          <span className="absolute left-20 top-3 h-1.5 w-1.5 rotate-45 rounded-sm bg-amber-400/60" />
+        </div>
+      )}
+      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+        <span className={`relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl shadow-sm ${sent ? 'bg-emerald-500 text-white shadow-emerald-500/20' : 'bg-red-100 text-coral'}`}>
+          {sent ? <><Check size={24} strokeWidth={2.5} /><Sparkles className="absolute -right-2 -top-2 text-amber-400" size={17} fill="currentColor" /></> : <AlertCircle size={22} />}
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold text-ink">{sent ? 'Termo enviado com sucesso' : 'Não foi possível enviar o termo'}</h2>
+          {sent && <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Entrega confirmada</p>}
+          <h2 className="text-lg font-semibold text-ink">{sent ? 'Tudo certo, convite enviado!' : 'Não foi possível enviar o termo'}</h2>
           <p className="mt-1 text-sm text-steel">
             {sent
               ? `O Bitrix24 confirmou a mensagem no chat de ${term.name}.`
               : term.sendError || term.prepareError || 'Confira os dados e tente novamente.'}
           </p>
-          <p className="mt-1 text-xs text-steel">{term.equipment.length} {term.equipment.length === 1 ? 'equipamento vinculado' : 'equipamentos vinculados'}</p>
+          {sent ? (
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100/80 px-2.5 py-1 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300"><Check size={12} /> Chat confirmado</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100/80 px-2.5 py-1 text-b24-blue-dark dark:bg-sky-400/10 dark:text-sky-300"><Package size={12} /> {term.equipment.length} {term.equipment.length === 1 ? 'equipamento' : 'equipamentos'}</span>
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-steel">{term.equipment.length} {term.equipment.length === 1 ? 'equipamento vinculado' : 'equipamentos vinculados'}</p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
           {sent && !providerLocal && conversationUrl && (

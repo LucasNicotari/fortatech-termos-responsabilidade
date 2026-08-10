@@ -48,13 +48,27 @@ export function Signatures() {
       }
     })).data,
     initialPageParam: '',
-    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true
   });
   const requests = useMemo(
     () => requestsQuery.data?.pages.flatMap((page) => page.items) || [],
     [requestsQuery.data]
   );
   const visible = requests;
+  const employeeRequestContext = useMemo(() => {
+    const context = new Map<string, { total: number; completed: number }>();
+    for (const request of requests) {
+      const current = context.get(request.employeeId) || { total: 0, completed: 0 };
+      current.total += 1;
+      const signatureStatus = request.signatures?.[0]?.status;
+      if (request.status === 'COMPLETED' || signatureStatus === 'FINISHED') current.completed += 1;
+      context.set(request.employeeId, current);
+    }
+    return context;
+  }, [requests]);
   const selectableVisible = useMemo(
     () => visible.filter(canRemoveFromHistory),
     [visible]
@@ -284,6 +298,10 @@ export function Signatures() {
               const status = signature?.status || request.status;
               const expanded = expandedId === request.id;
               const employeeName = request.employee?.nome || 'Colaborador não identificado';
+              const employeeContext = employeeRequestContext.get(request.employeeId);
+              const hasAnotherCompleted = status !== 'FINISHED'
+                && status !== 'COMPLETED'
+                && Boolean(employeeContext?.completed);
               const removable = canRemoveFromHistory(request);
               const selected = selectedIds.has(request.id);
               return (
@@ -312,7 +330,20 @@ export function Signatures() {
                     )}
                     <button onClick={() => setExpandedId(expanded ? null : request.id)} aria-expanded={expanded} className="focus-ring grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left lg:grid-cols-[minmax(240px,1.4fr)_minmax(180px,1fr)_150px_130px_32px] lg:gap-4 lg:px-5">
                       <span className="col-span-2 min-w-0 lg:col-span-1">
-                        <strong className="block truncate text-sm text-ink">{employeeName}</strong>
+                        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <strong className="truncate text-sm text-ink">{employeeName}</strong>
+                          {employeeContext && employeeContext.total > 1 && (
+                            <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-steel dark:bg-white/[0.06]">
+                              {employeeContext.total} termos
+                            </span>
+                          )}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-steel">Criado em {formatDate(request.createdAt)}</span>
+                        {hasAnotherCompleted && (
+                          <span className="mt-1 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">
+                            Outro termo já concluído
+                          </span>
+                        )}
                       </span>
                       <span className="min-w-0"><span className="block truncate text-sm text-ink">{request.documentFileName || 'Documento em preparação'}</span><span className="mt-0.5 flex items-center gap-1 text-xs text-steel"><Package size={13} /> {request.equipment?.length || 0} {(request.equipment?.length || 0) === 1 ? 'item' : 'itens'}</span></span>
                       <span><StatusBadge status={status} /></span>
