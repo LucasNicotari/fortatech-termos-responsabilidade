@@ -24,6 +24,9 @@ Operadores e destinatários de notificações são editáveis em **Configuraçõ
 acessos**. Essas atribuições não criam campos de assinatura: no fluxo atual, apenas o colaborador
 assina.
 
+<img width="960" height="540" alt="fortadocs-demonstracao" src="https://github.com/user-attachments/assets/8ed5648e-88ca-4793-9e77-3e13b393e92e" />
+
+
 ## Componentes
 
 - React, Vite, TypeScript, TanStack Query e Tailwind no frontend.
